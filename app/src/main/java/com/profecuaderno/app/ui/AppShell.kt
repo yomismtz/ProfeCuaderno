@@ -118,8 +118,8 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                 Screen.ATTENDANCE -> RequirePeriod(period) { AttendanceScreen(db, period!!, tick, refreshAll) }
                 Screen.EVALUATION -> RequirePeriod(period) { EvaluationScreen(db, period!!, tick, refreshAll) }
                 Screen.RUBRICS -> RequirePeriod(period) { RubricsScreen(db, period!!, tick, refreshAll) }
-                Screen.GUIDE -> RequirePeriod(period) { GuideScreen(period!!) }
-                Screen.CALENDAR -> RequirePeriod(period) { CalendarScreen(db, period!!, tick, refreshAll) }
+                Screen.GUIDE -> RequirePeriod(period) { GuideScreen(db, period!!, tick, refreshAll) }
+                Screen.CALENDAR -> CalendarScreen(db, tick, refreshAll)
                 Screen.REPORTS -> RequirePeriod(period) { ReportsScreen(db, period!!, tick) }
                 Screen.PROFILE -> ProfileScreen(teacher) {
                     db.saveTeacher(it)

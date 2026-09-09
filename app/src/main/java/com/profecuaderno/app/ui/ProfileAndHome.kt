@@ -19,6 +19,7 @@ import com.profecuaderno.app.data.Teacher
 import com.profecuaderno.app.data.TeacherDbHelper
 import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -41,7 +42,7 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
                 HorizontalDivider()
                 Text("Configura tu perfil", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(name, { name = it }, label = { Text("Nombre completo *") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(degree, { degree = it }, label = { Text("Grado profesional *") }, placeholder = { Text("Mtra., Dr., Lic., Prof., etc.") }, modifier = Modifier.fillMaxWidth())
+                DegreeSelector(degree, { degree = it }, "Grado profesional *")
                 DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
                 OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
@@ -55,6 +56,7 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
     var name by remember { mutableStateOf(teacher.name) }
@@ -67,7 +69,7 @@ fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
         Text("Mi perfil docente", style = MaterialTheme.typography.titleLarge)
         Text("Estos datos se muestran en tu cuaderno y pueden editarse cuando lo necesites.")
         OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(degree, { degree = it }, label = { Text("Grado profesional") }, modifier = Modifier.fillMaxWidth())
+        DegreeSelector(degree, { degree = it }, "Grado profesional")
         DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
         OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
@@ -75,6 +77,42 @@ fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
             onClick = { onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
             enabled = name.isNotBlank() && degree.isNotBlank()
         ) { Text("Guardar cambios") }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DegreeSelector(value: String, onValueChange: (String) -> Unit, label: String) {
+    val options = listOf(
+        "Maestro(a)",
+        "Doctor(a)",
+        "Licenciatura",
+        "Postdoctorado",
+        "Ingeniería",
+        "Profesor(a)",
+        "Otro"
+    )
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -98,8 +136,8 @@ fun HomeScreen(
 
     val actions = listOf(
         FolderAction(
-            "Programas",
-            if (period == null) "Crea tu primer programa docente" else "Programa actual: ${period.name}",
+            "Grupos",
+            if (period == null) "Crea tu primer grupo" else "Grupo actual: ${period.name}",
             onPrograms
         ),
         FolderAction(
@@ -119,7 +157,7 @@ fun HomeScreen(
             Column(Modifier.padding(18.dp)) {
                 Text("ProfeCuaderno", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                Text("Organiza tu trabajo docente por carpetas.")
+                Text("Crea tus grupos y organiza cada uno por carpetas.")
                 if (teacher.institution.isNotBlank()) Text(teacher.institution, style = MaterialTheme.typography.bodySmall)
             }
         }

@@ -18,6 +18,73 @@ import com.profecuaderno.app.data.RubricCriterion
 import com.profecuaderno.app.data.TeacherDbHelper
 import kotlin.math.abs
 
+private data class RubricPreset(
+    val name: String,
+    val criteria: List<Pair<String, Double>>
+)
+
+private val rubricPresets = listOf(
+    RubricPreset(
+        "Investigación",
+        listOf(
+            "Planteamiento del problema" to 10.0,
+            "Objetivos" to 10.0,
+            "Antecedentes / marco teórico" to 15.0,
+            "Metodología" to 20.0,
+            "Resultados" to 15.0,
+            "Discusión" to 15.0,
+            "Conclusiones" to 10.0,
+            "Referencias" to 5.0
+        )
+    ),
+    RubricPreset(
+        "Exposición oral",
+        listOf(
+            "Dominio del tema" to 25.0,
+            "Claridad y organización" to 15.0,
+            "Calidad del material visual" to 10.0,
+            "Uso del tiempo" to 10.0,
+            "Expresión oral" to 10.0,
+            "Presentación de resultados" to 15.0,
+            "Respuesta a preguntas" to 15.0
+        )
+    ),
+    RubricPreset(
+        "Trabajo escrito",
+        listOf(
+            "Contenido" to 30.0,
+            "Organización" to 15.0,
+            "Análisis y argumentación" to 20.0,
+            "Redacción y ortografía" to 15.0,
+            "Fuentes y referencias" to 10.0,
+            "Presentación" to 10.0
+        )
+    ),
+    RubricPreset(
+        "Maqueta / proyecto",
+        listOf(
+            "Exactitud del contenido" to 20.0,
+            "Diseño y organización" to 15.0,
+            "Calidad de elaboración" to 20.0,
+            "Funcionalidad / pertinencia" to 15.0,
+            "Presentación" to 10.0,
+            "Explicación del trabajo" to 10.0,
+            "Indicaciones y aplicación" to 10.0
+        )
+    ),
+    RubricPreset(
+        "Práctica",
+        listOf(
+            "Preparación previa" to 15.0,
+            "Ejecución del procedimiento" to 30.0,
+            "Calidad del resultado" to 25.0,
+            "Organización y manejo del material" to 10.0,
+            "Trabajo colaborativo" to 10.0,
+            "Responsabilidad" to 10.0
+        )
+    )
+)
+
 @Composable
 fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onChanged: () -> Unit) {
     val categories = remember(refresh, period.id) { db.getCategories(period.id) }
@@ -31,7 +98,7 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
                 Text("Calificación final", style = MaterialTheme.typography.titleMedium)
-                Text("Todos los rubros deben sumar exactamente 100%.")
+                Text("Todos los rubros de evaluación deben sumar exactamente 100%.")
                 Spacer(Modifier.height(6.dp))
                 val ok = abs(total - 100.0) < 0.001
                 Text(
@@ -58,9 +125,13 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(category.name, style = MaterialTheme.typography.titleMedium)
-                                Text("Peso final: ${"%.1f".format(category.weight)}%")
+                                Text("Peso dentro de la calificación final: ${"%.1f".format(category.weight)}%")
                                 if (criteria.isNotEmpty()) {
-                                    Text("Rúbrica: ${criteria.size} criterios · ${"%.1f".format(rubricTotal)}%", style = MaterialTheme.typography.bodySmall)
+                                    val ready = abs(rubricTotal - 100.0) < 0.001
+                                    Text(
+                                        "Rúbrica: ${criteria.size} criterios · ${"%.1f".format(rubricTotal)}%${if (ready) " ✓" else " ⚠"}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 } else Text("Sin rúbrica interna", style = MaterialTheme.typography.bodySmall)
                             }
                             IconButton(onClick = { editingCategory = category }) { Icon(Icons.Default.Edit, "Editar") }
@@ -120,7 +191,7 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
 private fun CategoryDialog(title: String, initial: EvaluationCategory, onDismiss: () -> Unit, onSave: (EvaluationCategory) -> Unit) {
     var name by remember(initial.id) { mutableStateOf(initial.name) }
     var weightText by remember(initial.id) { mutableStateOf(if (initial.weight == 0.0) "" else initial.weight.toString()) }
-    val weight = weightText.toDoubleOrNull()
+    val weight = weightText.replace(',', '.').toDoubleOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -128,6 +199,7 @@ private fun CategoryDialog(title: String, initial: EvaluationCategory, onDismiss
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Nombre del rubro") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(weightText, { weightText = it }, label = { Text("Valor dentro de la calificación final (%)") }, modifier = Modifier.fillMaxWidth())
+                Text("Ejemplos: Exámenes, Investigación, Exposición, Maqueta, Prácticas, Tareas, Participación.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(initial.copy(name = name, weight = weight!!)) }) { Text("Guardar") } },
@@ -142,15 +214,34 @@ private fun RubricDialog(db: TeacherDbHelper, category: EvaluationCategory, refr
     var showNew by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RubricCriterion?>(null) }
     var deleting by remember { mutableStateOf<RubricCriterion?>(null) }
+    var selectedPreset by remember { mutableStateOf<RubricPreset?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rúbrica · ${category.name}") },
         text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 560.dp)) {
-                Text("Los criterios internos también deben sumar 100%.")
-                Text("Total: ${"%.1f".format(total)}%", color = if (abs(total - 100.0) < 0.001 || criteria.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
+            Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
+                Text("Los criterios internos deben sumar 100%. Puedes empezar con una idea prediseñada y después modificarla.")
+                Text(
+                    "Total: ${"%.1f".format(total)}%",
+                    color = if (abs(total - 100.0) < 0.001 || criteria.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                )
                 Spacer(Modifier.height(8.dp))
+
+                if (criteria.isEmpty()) {
+                    Text("Ideas para empezar", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    rubricPresets.forEach { preset ->
+                        OutlinedButton(
+                            onClick = { selectedPreset = preset },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(preset.name) }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    HorizontalDivider()
+                    Spacer(Modifier.height(8.dp))
+                }
+
                 LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(criteria, key = { it.id }) { criterion ->
                         OutlinedCard(Modifier.fillMaxWidth()) {
@@ -163,7 +254,11 @@ private fun RubricDialog(db: TeacherDbHelper, category: EvaluationCategory, refr
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Agregar criterio") }
+                Button(onClick = { showNew = true }) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Agregar criterio")
+                }
             }
         },
         confirmButton = {
@@ -173,6 +268,40 @@ private fun RubricDialog(db: TeacherDbHelper, category: EvaluationCategory, refr
             ) { Text("Listo") }
         }
     )
+
+    selectedPreset?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { selectedPreset = null },
+            title = { Text("Usar idea: ${preset.name}") },
+            text = {
+                Column {
+                    preset.criteria.forEach { (name, weight) ->
+                        Text("• $name — ${"%.0f".format(weight)}%")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Total: 100%. Después podrás editar o eliminar cualquier criterio.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    preset.criteria.forEachIndexed { index, pair ->
+                        db.saveRubricCriterion(
+                            RubricCriterion(
+                                id = 0,
+                                categoryId = category.id,
+                                name = pair.first,
+                                weight = pair.second,
+                                position = index
+                            )
+                        )
+                    }
+                    selectedPreset = null
+                    onChanged()
+                }) { Text("Usar esta rúbrica") }
+            },
+            dismissButton = { TextButton(onClick = { selectedPreset = null }) { Text("Cancelar") } }
+        )
+    }
 
     if (showNew) CriterionDialog(
         initial = RubricCriterion(0, category.id, "", 0.0, criteria.size),
@@ -201,14 +330,15 @@ private fun RubricDialog(db: TeacherDbHelper, category: EvaluationCategory, refr
 private fun CriterionDialog(initial: RubricCriterion, onDismiss: () -> Unit, onSave: (RubricCriterion) -> Unit) {
     var name by remember(initial.id) { mutableStateOf(initial.name) }
     var weightText by remember(initial.id) { mutableStateOf(if (initial.weight == 0.0) "" else initial.weight.toString()) }
-    val weight = weightText.toDoubleOrNull()
+    val weight = weightText.replace(',', '.').toDoubleOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial.id == 0L) "Nuevo criterio" else "Editar criterio") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Criterio") })
-                OutlinedTextField(weightText, { weightText = it }, label = { Text("Valor dentro de la rúbrica (%)") })
+                OutlinedTextField(name, { name = it }, label = { Text("¿Qué vas a evaluar?") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(weightText, { weightText = it }, label = { Text("Porcentaje dentro de la rúbrica") }, modifier = Modifier.fillMaxWidth())
+                Text("Ejemplos: dominio del tema, metodología, resultados, claridad, redacción, puntualidad, calidad de elaboración.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(initial.copy(name = name, weight = weight!!)) }) { Text("Guardar") } },

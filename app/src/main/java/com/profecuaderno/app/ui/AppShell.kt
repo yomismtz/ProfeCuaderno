@@ -13,15 +13,17 @@ import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.TeacherDbHelper
 
 private enum class Screen(val title: String) {
-    HOME("ProfeCuaderno"),
+    HOME("Inicio"),
+    PROGRAMS("Programas"),
+    PROGRAM_HOME("Programa"),
     STUDENTS("Alumnos"),
     ATTENDANCE("Asistencia"),
     EVALUATION("Evaluación"),
     RUBRICS("Rubros y rúbricas"),
+    GUIDE("Guía / planeación"),
     CALENDAR("Calendario"),
-    PERIODS("Periodos"),
     REPORTS("Reportes"),
-    PROFILE("Mi perfil")
+    PROFILE("Mi perfil docente")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +40,16 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
         onDataChanged()
     }
 
+    fun goBack() {
+        screen = when (screen) {
+            Screen.PROGRAM_HOME -> Screen.PROGRAMS
+            Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
+            Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
+            Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE -> Screen.HOME
+            Screen.HOME -> Screen.HOME
+        }
+    }
+
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
@@ -45,24 +57,28 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                 title = {
                     Column {
                         Text(screen.title)
-                        if (screen != Screen.PERIODS && period != null) {
+                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && period != null) {
                             Text(period.name, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 },
                 navigationIcon = {
                     if (screen != Screen.HOME) {
-                        IconButton(onClick = { screen = Screen.HOME }) {
+                        IconButton(onClick = { goBack() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Regresar")
                         }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { screen = Screen.PROFILE }) {
-                        Icon(Icons.Default.Person, contentDescription = "Perfil")
+                    if (screen != Screen.PROFILE) {
+                        IconButton(onClick = { screen = Screen.PROFILE }) {
+                            Icon(Icons.Default.Person, contentDescription = "Perfil docente")
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                )
             )
         }
     ) { padding ->
@@ -71,35 +87,40 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                 Screen.HOME -> HomeScreen(
                     teacher = teacher,
                     period = period,
-                    onStudents = { screen = Screen.STUDENTS },
-                    onAttendance = { screen = Screen.ATTENDANCE },
-                    onEvaluation = { screen = Screen.EVALUATION },
-                    onRubrics = { screen = Screen.RUBRICS },
-                    onCalendar = { screen = Screen.CALENDAR },
-                    onPeriods = { screen = Screen.PERIODS },
-                    onReports = { screen = Screen.REPORTS },
                     db = db,
-                    refresh = tick
+                    refresh = tick,
+                    onPrograms = { screen = Screen.PROGRAMS },
+                    onCalendar = { screen = Screen.CALENDAR },
+                    onProfile = { screen = Screen.PROFILE }
                 )
-                Screen.STUDENTS -> RequirePeriod(period) {
-                    StudentsScreen(db, period!!, tick, refreshAll)
+                Screen.PROGRAMS -> PeriodsScreen(
+                    db = db,
+                    refresh = tick,
+                    onChanged = refreshAll,
+                    onOpen = {
+                        db.activatePeriod(it.id)
+                        refreshAll()
+                        screen = Screen.PROGRAM_HOME
+                    }
+                )
+                Screen.PROGRAM_HOME -> RequirePeriod(period) {
+                    ProgramHomeScreen(
+                        period = period!!,
+                        onStudents = { screen = Screen.STUDENTS },
+                        onAttendance = { screen = Screen.ATTENDANCE },
+                        onEvaluation = { screen = Screen.EVALUATION },
+                        onRubrics = { screen = Screen.RUBRICS },
+                        onGuide = { screen = Screen.GUIDE },
+                        onReports = { screen = Screen.REPORTS }
+                    )
                 }
-                Screen.ATTENDANCE -> RequirePeriod(period) {
-                    AttendanceScreen(db, period!!, tick, refreshAll)
-                }
-                Screen.EVALUATION -> RequirePeriod(period) {
-                    EvaluationScreen(db, period!!, tick, refreshAll)
-                }
-                Screen.RUBRICS -> RequirePeriod(period) {
-                    RubricsScreen(db, period!!, tick, refreshAll)
-                }
-                Screen.CALENDAR -> RequirePeriod(period) {
-                    CalendarScreen(db, period!!, tick, refreshAll)
-                }
-                Screen.PERIODS -> PeriodsScreen(db, tick, refreshAll)
-                Screen.REPORTS -> RequirePeriod(period) {
-                    ReportsScreen(db, period!!, tick)
-                }
+                Screen.STUDENTS -> RequirePeriod(period) { StudentsScreen(db, period!!, tick, refreshAll) }
+                Screen.ATTENDANCE -> RequirePeriod(period) { AttendanceScreen(db, period!!, tick, refreshAll) }
+                Screen.EVALUATION -> RequirePeriod(period) { EvaluationScreen(db, period!!, tick, refreshAll) }
+                Screen.RUBRICS -> RequirePeriod(period) { RubricsScreen(db, period!!, tick, refreshAll) }
+                Screen.GUIDE -> RequirePeriod(period) { GuideScreen(period!!) }
+                Screen.CALENDAR -> RequirePeriod(period) { CalendarScreen(db, period!!, tick, refreshAll) }
+                Screen.REPORTS -> RequirePeriod(period) { ReportsScreen(db, period!!, tick) }
                 Screen.PROFILE -> ProfileScreen(teacher) {
                     db.saveTeacher(it)
                     refreshAll()
@@ -116,9 +137,9 @@ private fun RequirePeriod(period: AcademicPeriod?, content: @Composable () -> Un
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             ElevatedCard {
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Primero crea un periodo escolar", style = MaterialTheme.typography.titleMedium)
+                    Text("Primero crea un programa", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
-                    Text("Puede ser trimestre, cuatrimestre, semestre, bimestre u otro.")
+                    Text("Después podrás usar calendario, asistencia, evaluación y demás carpetas.")
                 }
             }
         }

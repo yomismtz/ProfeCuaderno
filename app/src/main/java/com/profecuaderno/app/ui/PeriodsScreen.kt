@@ -5,7 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,7 +17,12 @@ import com.profecuaderno.app.data.TeacherDbHelper
 import java.time.LocalDate
 
 @Composable
-fun PeriodsScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
+fun PeriodsScreen(
+    db: TeacherDbHelper,
+    refresh: Int,
+    onChanged: () -> Unit,
+    onOpen: (AcademicPeriod) -> Unit
+) {
     val periods = remember(refresh) { db.getPeriods() }
     val active = periods.firstOrNull { it.active }
     var showNew by remember { mutableStateOf(false) }
@@ -25,29 +31,43 @@ fun PeriodsScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Cambiar de trimestre o semestre", style = MaterialTheme.typography.titleMedium)
-                    Text("Al crear un nuevo periodo puedes iniciar vacío o copiar solo tus rubros y rúbricas. Los alumnos y asistencias anteriores quedan archivados.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Mis programas docentes", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Cada programa funciona como una carpeta principal. Dentro estarán alumnos, asistencia, evaluación, rúbricas, guía/planeación y reportes.")
                 }
             }
             Spacer(Modifier.height(10.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (periods.isEmpty()) {
+                    item {
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(18.dp)) {
+                                Text("Aún no tienes programas.")
+                                Text("Pulsa + para crear el primero.")
+                            }
+                        }
+                    }
+                }
                 items(periods, key = { it.id }) { period ->
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(42.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(period.name, style = MaterialTheme.typography.titleMedium)
-                                    if (period.active) {
-                                        Spacer(Modifier.width(8.dp))
-                                        Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.secondary)
-                                    }
-                                }
-                                Text("${period.type} · ${period.startDate} → ${period.endDate}", style = MaterialTheme.typography.bodySmall)
+                                Text(period.name, style = MaterialTheme.typography.titleMedium)
+                                Text("${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}", style = MaterialTheme.typography.bodySmall)
                                 if (period.archived) Text("Archivado", style = MaterialTheme.typography.labelSmall)
                             }
-                            if (!period.active) {
-                                TextButton(onClick = { db.activatePeriod(period.id); onChanged() }) { Text("Activar") }
-                            }
+                            Button(onClick = { onOpen(period) }) { Text("Abrir") }
                         }
                     }
                 }
@@ -55,21 +75,26 @@ fun PeriodsScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
             }
         }
         FloatingActionButton(onClick = { showNew = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-            Icon(Icons.Default.Add, "Nuevo periodo")
+            Icon(Icons.Default.Add, "Nuevo programa")
         }
     }
 
-    if (showNew) NewPeriodDialog(periods = periods, active = active, onDismiss = { showNew = false }) { name, type, start, end, copyFrom ->
+    if (showNew) NewProgramDialog(
+        periods = periods,
+        active = active,
+        onDismiss = { showNew = false }
+    ) { name, type, start, end, copyFrom ->
         active?.let { db.closePeriod(it.id) }
         db.createPeriod(name, type, start, end, copyFrom, true)
         showNew = false
         onChanged()
+        db.getActivePeriod()?.let(onOpen)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NewPeriodDialog(
+private fun NewProgramDialog(
     periods: List<AcademicPeriod>,
     active: AcademicPeriod?,
     onDismiss: () -> Unit,
@@ -84,30 +109,46 @@ private fun NewPeriodDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nuevo periodo") },
+        title = { Text("Crear programa docente") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, placeholder = { Text("Ej. 26-O / 2027-1") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    name,
+                    { name = it },
+                    label = { Text("Nombre del programa / materia") },
+                    placeholder = { Text("Ej. Determinantes de la condición oclusal") },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
-                    OutlinedTextField(type, {}, readOnly = true, label = { Text("Tipo") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                    OutlinedTextField(
+                        type,
+                        {},
+                        readOnly = true,
+                        label = { Text("Tipo de periodo") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
                     ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
                         listOf("Trimestre", "Cuatrimestre", "Semestre", "Bimestre", "Otro").forEach { option ->
                             DropdownMenuItem(text = { Text(option) }, onClick = { type = option; typeExpanded = false })
                         }
                     }
                 }
-                OutlinedTextField(start, { start = it }, label = { Text("Inicio") }, placeholder = { Text("AAAA-MM-DD") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(end, { end = it }, label = { Text("Fin") }, placeholder = { Text("AAAA-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                DatePickerField(start, { start = it }, "Fecha de inicio")
+                DatePickerField(end, { end = it }, "Fecha de término")
                 if (periods.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(copyStructure, { copyStructure = it })
-                        Text("Copiar rubros y rúbricas del periodo actual")
+                        Text("Copiar rubros y rúbricas del programa anterior")
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name, type, start, end, if (copyStructure) active?.id else null) }) { Text("Crear") }
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = { onSave(name, type, start, end, if (copyStructure) active?.id else null) }
+            ) { Text("Crear programa") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

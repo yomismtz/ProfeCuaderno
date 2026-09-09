@@ -104,7 +104,9 @@ private fun NewProgramDialog(
     var start by remember { mutableStateOf(LocalDate.now().toString()) }
     var end by remember { mutableStateOf("") }
     var copyStructure by remember { mutableStateOf(active != null) }
+    var copyFromId by remember { mutableStateOf(active?.id) }
     var typeExpanded by remember { mutableStateOf(false) }
+    var copyExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -138,7 +140,32 @@ private fun NewProgramDialog(
                 if (periods.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(copyStructure, { copyStructure = it })
-                        Text("Copiar rubros y rúbricas del grupo anterior")
+                        Text("Usar plantilla de otro grupo")
+                    }
+                    if (copyStructure) {
+                        ExposedDropdownMenuBox(expanded = copyExpanded, onExpandedChange = { copyExpanded = !copyExpanded }) {
+                            val source = periods.firstOrNull { it.id == copyFromId }
+                            OutlinedTextField(
+                                value = source?.name ?: "Selecciona un grupo",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Copiar rubros, rúbricas y actividades de") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(copyExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(expanded = copyExpanded, onDismissRequest = { copyExpanded = false }) {
+                                periods.forEach { sourcePeriod ->
+                                    DropdownMenuItem(
+                                        text = { Text(sourcePeriod.name) },
+                                        onClick = {
+                                            copyFromId = sourcePeriod.id
+                                            copyExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Text("Solo se copiará la estructura de evaluación. No se copian alumnos, asistencias ni calificaciones.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -146,7 +173,7 @@ private fun NewProgramDialog(
         confirmButton = {
             TextButton(
                 enabled = name.isNotBlank(),
-                onClick = { onSave(name, type, start, end, if (copyStructure) active?.id else null) }
+                onClick = { onSave(name, type, start, end, if (copyStructure) copyFromId else null) }
             ) { Text("Crear grupo") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }

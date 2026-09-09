@@ -42,31 +42,31 @@ fun PeriodsScreen(
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
                             Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
+                            Text("Abre un grupo para trabajar.", style = MaterialTheme.typography.bodySmall)
                         }
-                        Text("Abre un grupo para trabajar. Antes de cerrarlo puedes revisar un resumen de estudiantes, evaluación y pendientes.")
-                        OutlinedButton(
-                            onClick = { showDemoConfirm = true },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        ) {
-                            Icon(Icons.Default.Science, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Crear grupo de demostración")
+                        TextButton(onClick = { showDemoConfirm = true }) {
+                            Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Demo")
                         }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (periods.isEmpty()) {
                         item {
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp)) {
                                     Text("Aún no tienes grupos.")
-                                    Text("Pulsa + para crear el primero o usa el modo demostración.")
+                                    Text("Pulsa + para crear el primero o usa Demo.")
                                 }
                             }
                         }

@@ -5,14 +5,20 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
+import com.profecuaderno.app.data.AttendanceHistoryStore
 import com.profecuaderno.app.data.AttendancePolicyStore
 import com.profecuaderno.app.data.AttendanceStatus
+import com.profecuaderno.app.data.Student
 import com.profecuaderno.app.data.TeacherDbHelper
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -24,6 +30,7 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
     val students = remember(refresh, period.id) { db.getStudents(period.id) }
     val session = remember(refresh, period.id, date) { db.getAttendanceSession(period.id, date) }
     var worked by remember(session?.id, session?.worked) { mutableStateOf(session?.worked ?: true) }
+    var historyStudent by remember { mutableStateOf<Student?>(null) }
     var justifiedCounts by remember(refresh, period.id) {
         mutableStateOf(AttendancePolicyStore.justifiedCounts(db, period.id))
     }
@@ -89,12 +96,30 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
                     val current = remember(refresh, session.id, student.id) { db.getAttendanceStatus(session.id, student.id) }
+                    val incidents = remember(refresh, period.id, student.id) {
+                        AttendanceHistoryStore.incidentsForStudent(db, period.id, student.id)
+                    }
+                    val absenceCount = incidents.count { it.status == AttendanceStatus.ABSENT }
+                    val justifiedCount = incidents.count { it.status == AttendanceStatus.JUSTIFIED }
+
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(student.name, style = MaterialTheme.typography.titleSmall)
                                     Text("Asistencia acumulada: ${"%.1f".format(db.attendancePercentage(period.id, student.id))}%", style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        "Faltas: $absenceCount · Justificadas: $justifiedCount",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = { historyStudent = student },
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Icon(Icons.Default.History, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Historial")
                                 }
                             }
                             Spacer(Modifier.height(6.dp))
@@ -121,6 +146,125 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
             }
         }
     }
+
+    historyStudent?.let { student ->
+        AttendanceHistoryDialog(
+            db = db,
+            period = period,
+            student = student,
+            refresh = refresh,
+            onChanged = onChanged,
+            onDismiss = { historyStudent = null }
+        )
+    }
+}
+
+@Composable
+private fun AttendanceHistoryDialog(
+    db: TeacherDbHelper,
+    period: AcademicPeriod,
+    student: Student,
+    refresh: Int,
+    onChanged: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var localRefresh by remember { mutableIntStateOf(0) }
+    val tick = refresh + localRefresh
+    val incidents = remember(tick, period.id, student.id) {
+        AttendanceHistoryStore.incidentsForStudent(db, period.id, student.id)
+    }
+    val absences = incidents.count { it.status == AttendanceStatus.ABSENT }
+    val justified = incidents.count { it.status == AttendanceStatus.JUSTIFIED }
+    val late = incidents.count { it.status == AttendanceStatus.LATE }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("Historial de asistencia")
+                Text(student.name, style = MaterialTheme.typography.bodyMedium)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Asistencia actual: ${"%.1f".format(db.attendancePercentage(period.id, student.id))}%",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Faltas: $absences · Justificadas: $justified · Retardos: $late",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Aquí puedes revisar qué días faltó el estudiante. Cuando entregue un justificante, cambia esa fecha a Justificada; el porcentaje se recalcula de inmediato.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                if (incidents.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Text("Este estudiante no tiene faltas, retardos ni justificadas registradas.")
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(incidents, key = { "${it.sessionId}-${it.status.name}" }) { entry ->
+                            OutlinedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(entry.date, style = MaterialTheme.typography.titleSmall)
+                                            Text(entry.title.ifBlank { "Clase" }, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        AssistChip(
+                                            onClick = {},
+                                            label = { Text(shortStatus(entry.status)) }
+                                        )
+                                    }
+
+                                    when (entry.status) {
+                                        AttendanceStatus.ABSENT -> {
+                                            Button(
+                                                onClick = {
+                                                    db.setAttendanceStatus(entry.sessionId, student.id, AttendanceStatus.JUSTIFIED)
+                                                    localRefresh++
+                                                    onChanged()
+                                                },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                            ) {
+                                                Text("Cambiar falta a Justificada")
+                                            }
+                                        }
+                                        AttendanceStatus.JUSTIFIED -> {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    db.setAttendanceStatus(entry.sessionId, student.id, AttendanceStatus.ABSENT)
+                                                    localRefresh++
+                                                    onChanged()
+                                                },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                            ) {
+                                                Icon(Icons.Default.Restore, contentDescription = null)
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Volver a marcar como Falta")
+                                            }
+                                        }
+                                        else -> Unit
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("Cerrar")
+            }
+        }
+    )
 }
 
 private fun shortStatus(status: AttendanceStatus): String = when (status) {

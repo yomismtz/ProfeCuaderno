@@ -57,8 +57,8 @@ fun NotificationPermissionCard() {
                 Column(Modifier.weight(1f)) {
                     Text(if (allowed) "Notificaciones activadas" else "Activa los recordatorios", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        if (allowed) "Recibirás avisos de cumpleaños y actividades de la agenda."
-                        else "Mi Agenda Docente puede avisarte de cumpleaños, exámenes, prácticas, entregas, visitas y otras fechas.",
+                        if (allowed) "Recibirás avisos de cumpleaños y actividades de tu cuaderno."
+                        else "El Cuaderno del Maestro puede avisarte de cumpleaños, exámenes, prácticas, entregas, visitas y otras fechas.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

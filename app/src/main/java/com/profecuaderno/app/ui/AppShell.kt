@@ -3,6 +3,8 @@ package com.profecuaderno.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Palette
@@ -12,7 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
+import com.profecuaderno.app.data.GradeHistoryStore
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.data.TrashStore
 
 private enum class Screen(val title: String) {
     HOME("Inicio"),
@@ -28,7 +32,9 @@ private enum class Screen(val title: String) {
     PROFILE("Mi perfil docente"),
     APPEARANCE("Cambiar apariencia"),
     HELP("Ayuda"),
-    SECURITY("Seguridad y respaldo")
+    SECURITY("Seguridad y respaldo"),
+    TRASH("Papelera"),
+    GRADE_HISTORY("Historial de calificaciones")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +46,12 @@ fun ProfeCuadernoApp(
     currentTheme: AgendaThemeStyle,
     onThemeChanged: (AgendaThemeStyle) -> Unit
 ) {
+    remember(db) {
+        TrashStore.ensure(db)
+        GradeHistoryStore.ensure(db)
+        true
+    }
+
     var screen by remember { mutableStateOf(Screen.HOME) }
     var localRefresh by remember { mutableIntStateOf(0) }
     val tick = globalRefresh + localRefresh
@@ -56,7 +68,8 @@ fun ProfeCuadernoApp(
             Screen.PROGRAM_HOME -> Screen.PROGRAMS
             Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
-            Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP -> Screen.HOME
+            Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP,
+            Screen.TRASH, Screen.GRADE_HISTORY -> Screen.HOME
             Screen.APPEARANCE, Screen.SECURITY -> Screen.PROFILE
             Screen.HOME -> Screen.HOME
         }
@@ -69,7 +82,7 @@ fun ProfeCuadernoApp(
                 title = {
                     Column {
                         Text(screen.title)
-                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && screen != Screen.APPEARANCE && period != null) {
+                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY && period != null) {
                             Text(period.name, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -82,17 +95,25 @@ fun ProfeCuadernoApp(
                     }
                 },
                 actions = {
+                    if (screen == Screen.HOME || screen == Screen.PROFILE) {
+                        IconButton(onClick = { screen = Screen.GRADE_HISTORY }) {
+                            Icon(Icons.Default.History, contentDescription = "Historial de calificaciones")
+                        }
+                        IconButton(onClick = { screen = Screen.TRASH }) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = "Papelera")
+                        }
+                    }
                     if (screen == Screen.PROFILE) {
                         IconButton(onClick = { screen = Screen.APPEARANCE }) {
                             Icon(Icons.Default.Palette, contentDescription = "Cambiar apariencia")
                         }
                     }
-                    if (screen != Screen.HELP && screen != Screen.APPEARANCE) {
+                    if (screen != Screen.HELP && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY) {
                         IconButton(onClick = { screen = Screen.HELP }) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Ayuda")
                         }
                     }
-                    if (screen != Screen.PROFILE && screen != Screen.APPEARANCE) {
+                    if (screen != Screen.PROFILE && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY) {
                         IconButton(onClick = { screen = Screen.PROFILE }) {
                             Icon(Icons.Default.Person, contentDescription = "Perfil docente")
                         }
@@ -162,6 +183,8 @@ fun ProfeCuadernoApp(
                 )
                 Screen.HELP -> HelpScreen()
                 Screen.SECURITY -> SecurityBackupScreen(db) { refreshAll() }
+                Screen.TRASH -> TrashScreen(db, tick, refreshAll)
+                Screen.GRADE_HISTORY -> GradeHistoryScreen(db, tick, refreshAll)
             }
         }
     }

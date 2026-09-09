@@ -152,7 +152,7 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(categories, key = { it.id }) { category ->
-                val mode = runCatching { EvaluationMode.valueOf(category.mode) }.getOrDefault(EvaluationMode.DIRECT)
+                val mode = db.effectiveEvaluationMode(category)
                 val criteria = remember(refresh, category.id) { db.getRubricCriteria(category.id) }
                 val activities = remember(refresh, category.id) { db.getAssessmentItems(category.id) }
                 val rubricTotal = criteria.sumOf { it.weight }
@@ -170,7 +170,7 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     EvaluationMode.AVERAGE -> Text("${activities.size} actividades para promediar", style = MaterialTheme.typography.bodySmall)
-                                    EvaluationMode.ATTENDANCE -> Text("Se toma automáticamente del porcentaje de asistencia", style = MaterialTheme.typography.bodySmall)
+                                    EvaluationMode.ATTENDANCE -> Text("🔗 Enlazado con Asistencia: usa automáticamente el porcentaje actual de cada alumno", style = MaterialTheme.typography.bodySmall)
                                     EvaluationMode.DIRECT -> Text("Se captura una sola calificación", style = MaterialTheme.typography.bodySmall)
                                 }
                             }

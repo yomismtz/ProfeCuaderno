@@ -90,12 +90,13 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
 @Composable
 private fun DegreeSelector(value: String, onValueChange: (String) -> Unit, label: String) {
     val options = listOf(
-        "Maestro(a)",
-        "Doctor(a)",
+        "Docente / Profesor(a)",
         "Licenciatura",
-        "Postdoctorado",
         "Ingeniería",
-        "Profesor(a)",
+        "Maestría",
+        "Doctorado",
+        "Postdoctorado",
+        "Técnico(a)",
         "Otro"
     )
     var expanded by remember { mutableStateOf(false) }
@@ -173,7 +174,7 @@ fun HomeScreen(
         ),
         FolderAction(
             "Calendario",
-            if (period == null) "Crea un programa para usar la agenda" else if (todaySession == null) "Fechas, entregas y cumpleaños" else "Hoy ya tiene registro de asistencia",
+            if (period == null) "Crea un grupo para usar la agenda" else if (todaySession == null) "Fechas, entregas y cumpleaños" else "Hoy ya tiene registro de asistencia",
             onCalendar
         ),
         FolderAction(
@@ -256,7 +257,7 @@ fun ProgramHomeScreen(
         FolderAction("Asistencia", "Pase de lista y porcentaje sobre días trabajados", onAttendance),
         FolderAction("Evaluación", "Captura calificaciones y calcula el 100%", onEvaluation),
         FolderAction("Rubros y rúbricas", "Rubros del 100%, criterios, ideas y porcentajes editables", onRubrics),
-        FolderAction("Guía / planeación", "Sube y consulta el PDF del programa", onGuide),
+        FolderAction("Guía / planeación", "Sube y consulta el documento principal del curso", onGuide),
         FolderAction("Reportes", "Concentrado de asistencia y calificación", onReports)
     )
 

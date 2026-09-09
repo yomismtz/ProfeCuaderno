@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,11 +44,12 @@ private val SoftPurple = Color(0xFFD8C6F2)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var birth by remember { mutableStateOf("") }
     var degree by remember { mutableStateOf("") }
+    var teachingLevel by remember { mutableStateOf(loadTeachingLevel(context)) }
     var institution by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         ElevatedCard(Modifier.widthIn(max = 620.dp), shape = RoundedCornerShape(28.dp)) {
@@ -65,13 +67,17 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
                 HorizontalDivider()
                 Text("Configura tu perfil", style = MaterialTheme.typography.titleMedium)
                 Text("Diseñado para docentes de cualquier nivel educativo.", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(name, { name = it }, label = { Text("Nombre completo *") }, modifier = Modifier.fillMaxWidth())
-                DegreeSelector(degree, { degree = it }, "Perfil docente *")
+                OutlinedTextField(name, { name = it }, label = { Text("Nombre del docente *") }, modifier = Modifier.fillMaxWidth())
+                DegreeSelector(degree, { degree = it }, "Nivel de estudios *")
                 DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
-                OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
+                TeachingLevelSelector(teachingLevel, { teachingLevel = it })
+                OutlinedTextField(institution, { institution = it }, label = { Text("Nombre de la escuela") }, modifier = Modifier.fillMaxWidth())
+                TeacherPhotoPicker()
                 Button(
-                    onClick = { onSave(Teacher(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
+                    onClick = {
+                        saveTeachingLevel(context, teachingLevel)
+                        onSave(Teacher(name = name, birthDate = birth, degree = degree, institution = institution, email = ""))
+                    },
                     enabled = name.isNotBlank() && degree.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp)
@@ -84,24 +90,29 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) -> Unit) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(teacher.name) }
     var birth by remember { mutableStateOf(teacher.birthDate) }
     var degree by remember { mutableStateOf(teacher.degree) }
+    var teachingLevel by remember { mutableStateOf(loadTeachingLevel(context)) }
     var institution by remember { mutableStateOf(teacher.institution) }
-    var email by remember { mutableStateOf(teacher.email) }
 
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Mi perfil docente", style = MaterialTheme.typography.titleLarge)
         Text("Estos datos se muestran en tu cuaderno y pueden editarse cuando lo necesites.")
-        NotificationPermissionCard()
-        OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
-        DegreeSelector(degree, { degree = it }, "Perfil docente")
+        OutlinedTextField(name, { name = it }, label = { Text("Nombre del docente") }, modifier = Modifier.fillMaxWidth())
+        DegreeSelector(degree, { degree = it }, "Nivel de estudios")
         DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
-        OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
+        TeachingLevelSelector(teachingLevel, { teachingLevel = it })
+        OutlinedTextField(institution, { institution = it }, label = { Text("Nombre de la escuela") }, modifier = Modifier.fillMaxWidth())
+        TeacherPhotoPicker()
+        NotificationPermissionCard()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
+                onClick = {
+                    saveTeachingLevel(context, teachingLevel)
+                    onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution))
+                },
                 enabled = name.isNotBlank() && degree.isNotBlank(),
                 shape = RoundedCornerShape(16.dp)
             ) { Text("Guardar cambios") }
@@ -116,18 +127,15 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
 @Composable
 private fun DegreeSelector(value: String, onValueChange: (String) -> Unit, label: String) {
     val options = listOf(
-        "Preescolar",
-        "Primaria",
         "Secundaria",
-        "Telesecundaria",
         "Bachillerato / Preparatoria",
-        "Escuela técnica / Formación profesional",
-        "Universidad / Licenciatura",
+        "Carrera técnica",
+        "Licenciatura",
+        "Ingeniería",
+        "Especialidad",
         "Maestría",
         "Doctorado",
-        "Educación especial",
-        "Capacitación / Talleres",
-        "Docente de varios niveles",
+        "Postdoctorado",
         "Otro"
     )
     var expanded by remember { mutableStateOf(false) }

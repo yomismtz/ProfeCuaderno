@@ -16,20 +16,21 @@ fun NotebookBackground(content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(MaterialThemePaper)
             .drawBehind {
-                val gap = 28.dp.toPx()
+                // Hoja rayada muy suave: sin margen rojo vertical.
+                // Las líneas quedan como textura de fondo y no compiten con tarjetas o diálogos.
+                val gap = 32.dp.toPx()
                 var y = gap
                 while (y < size.height) {
-                    drawLine(Color(0xFFE5E0EE), start = androidx.compose.ui.geometry.Offset(0f, y), end = androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 1f)
+                    drawLine(
+                        color = Color(0xFFF0EDF4),
+                        start = androidx.compose.ui.geometry.Offset(0f, y),
+                        end = androidx.compose.ui.geometry.Offset(size.width, y),
+                        strokeWidth = 0.8f
+                    )
                     y += gap
                 }
-                drawLine(
-                    Color(0xFFE7A8A8),
-                    start = androidx.compose.ui.geometry.Offset(42.dp.toPx(), 0f),
-                    end = androidx.compose.ui.geometry.Offset(42.dp.toPx(), size.height),
-                    strokeWidth = 2f
-                )
             }
     ) { content() }
 }
 
-private val MaterialThemePaper = Color(0xFFFFFDF8)
+private val MaterialThemePaper = Color(0xFFFFFDF9)

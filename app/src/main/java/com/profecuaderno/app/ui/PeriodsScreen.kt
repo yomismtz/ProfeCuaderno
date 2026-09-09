@@ -34,10 +34,10 @@ fun PeriodsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(8.dp))
-                        Text("Mis programas docentes", style = MaterialTheme.typography.titleMedium)
+                        Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Text("Cada programa funciona como una carpeta principal. Dentro estarán alumnos, asistencia, evaluación, rúbricas, guía/planeación y reportes.")
+                    Text("Cada grupo funciona como una carpeta principal. Dentro estarán alumnos, asistencia, evaluación, rúbricas, guía/planeación y reportes.")
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -46,7 +46,7 @@ fun PeriodsScreen(
                     item {
                         ElevatedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(18.dp)) {
-                                Text("Aún no tienes programas.")
+                                Text("Aún no tienes grupos.")
                                 Text("Pulsa + para crear el primero.")
                             }
                         }
@@ -75,7 +75,7 @@ fun PeriodsScreen(
             }
         }
         FloatingActionButton(onClick = { showNew = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-            Icon(Icons.Default.Add, "Nuevo programa")
+            Icon(Icons.Default.Add, "Nuevo grupo")
         }
     }
 
@@ -109,13 +109,13 @@ private fun NewProgramDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Crear programa docente") },
+        title = { Text("Crear grupo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     name,
                     { name = it },
-                    label = { Text("Nombre del programa / materia") },
+                    label = { Text("Nombre del grupo / materia") },
                     placeholder = { Text("Ej. Determinantes de la condición oclusal") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -139,7 +139,7 @@ private fun NewProgramDialog(
                 if (periods.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(copyStructure, { copyStructure = it })
-                        Text("Copiar rubros y rúbricas del programa anterior")
+                        Text("Copiar rubros y rúbricas del grupo anterior")
                     }
                 }
             }
@@ -148,7 +148,7 @@ private fun NewProgramDialog(
             TextButton(
                 enabled = name.isNotBlank(),
                 onClick = { onSave(name, type, start, end, if (copyStructure) active?.id else null) }
-            ) { Text("Crear programa") }
+            ) { Text("Crear grupo") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

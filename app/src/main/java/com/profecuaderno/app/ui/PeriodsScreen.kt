@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.data.deletePeriodCascade
 import java.time.LocalDate
 
 @Composable
@@ -26,6 +28,7 @@ fun PeriodsScreen(
     val periods = remember(refresh) { db.getPeriods() }
     val active = periods.firstOrNull { it.active }
     var showNew by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<AcademicPeriod?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -37,7 +40,7 @@ fun PeriodsScreen(
                         Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Text("Cada grupo, materia o curso funciona como una carpeta principal. Dentro estarán estudiantes, asistencia, evaluación, rubros y rúbricas, guía/planeación y reportes.")
+                    Text("Toca directamente el recuadro de un grupo para abrirlo. Desde aquí también puedes eliminar grupos que ya no necesites.")
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -53,8 +56,14 @@ fun PeriodsScreen(
                     }
                 }
                 items(periods, key = { it.id }) { period ->
-                    ElevatedCard(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ElevatedCard(
+                        onClick = { onOpen(period) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
                                 if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
                                 null,
@@ -64,17 +73,32 @@ fun PeriodsScreen(
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(period.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                                 if (period.archived) Text("Archivado", style = MaterialTheme.typography.labelSmall)
+                                else Text("Toca para abrir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            Button(onClick = { onOpen(period) }) { Text("Abrir") }
+                            IconButton(
+                                onClick = { deleting = period }
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Eliminar ${period.name}",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
                 item { Spacer(Modifier.height(90.dp)) }
             }
         }
-        FloatingActionButton(onClick = { showNew = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
+        FloatingActionButton(
+            onClick = { showNew = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)
+        ) {
             Icon(Icons.Default.Add, "Nuevo grupo")
         }
     }
@@ -88,6 +112,34 @@ fun PeriodsScreen(
         showNew = false
         onChanged()
         db.getActivePeriod()?.let(onOpen)
+    }
+
+    deleting?.let { period ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Eliminar grupo") },
+            text = {
+                Text(
+                    "¿Eliminar '${period.name}'? También se eliminarán sus alumnos, asistencias, calificaciones, rúbricas, planeación y eventos. Esta acción no se puede deshacer."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        db.deletePeriodCascade(period.id)
+                        deleting = null
+                        onChanged()
+                    }
+                ) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 

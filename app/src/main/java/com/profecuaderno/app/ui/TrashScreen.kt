@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.FolderDelete
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,14 +20,61 @@ import java.util.Date
 
 @Composable
 fun TrashScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
-    val entries = remember(refresh) { TrashStore.entries(db) }
+    var localTick by remember { mutableIntStateOf(0) }
+    val tick = refresh + localTick
+    var autoExpire by remember(tick) { mutableStateOf(TrashStore.autoExpirationEnabled(db)) }
+    var entries by remember(tick) { mutableStateOf(TrashStore.entries(db)) }
     var deleting by remember { mutableStateOf<TrashEntry?>(null) }
+    var confirmEmpty by remember { mutableStateOf(false) }
+
+    LaunchedEffect(refresh) {
+        val purged = TrashStore.purgeExpired(db)
+        if (purged > 0) {
+            localTick++
+            onChanged()
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Papelera", style = MaterialTheme.typography.titleLarge)
-                Text("Los elementos enviados aquí conservan sus datos. Puedes restaurarlos o eliminarlos definitivamente.")
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FolderDelete, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Carpeta Papelera", style = MaterialTheme.typography.titleLarge)
+                        Text("Todo lo eliminado permanece recuperable hasta que lo borres definitivamente.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Eliminar automáticamente después de ${TrashStore.RETENTION_DAYS} días", style = MaterialTheme.typography.bodyMedium)
+                        Text("Está desactivado por defecto.", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Switch(
+                        checked = autoExpire,
+                        onCheckedChange = {
+                            autoExpire = it
+                            TrashStore.setAutoExpirationEnabled(db, it)
+                            if (it) {
+                                TrashStore.purgeExpired(db)
+                                localTick++
+                                onChanged()
+                            }
+                        }
+                    )
+                }
+                if (entries.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { confirmEmpty = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteForever, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Vaciar papelera")
+                    }
+                }
             }
         }
 
@@ -46,15 +94,29 @@ fun TrashScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
                                     "Eliminado: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.deletedAt))}",
                                     style = MaterialTheme.typography.labelSmall
                                 )
+                                if (autoExpire) {
+                                    Text(
+                                        "Se eliminará definitivamente en ${TrashStore.daysRemaining(entry)} días",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
-                            IconButton(onClick = {
-                                TrashStore.restore(db, entry)
-                                onChanged()
-                            }) {
-                                Icon(Icons.Default.Restore, contentDescription = "Restaurar")
+                            IconButton(
+                                onClick = {
+                                    TrashStore.restore(db, entry)
+                                    entries = TrashStore.entries(db)
+                                    onChanged()
+                                },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Icon(Icons.Default.Restore, contentDescription = "Restaurar ${entry.label}")
                             }
-                            IconButton(onClick = { deleting = entry }) {
-                                Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar definitivamente", tint = MaterialTheme.colorScheme.error)
+                            IconButton(
+                                onClick = { deleting = entry },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar definitivamente ${entry.label}", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -73,10 +135,28 @@ fun TrashScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit) {
                 TextButton(onClick = {
                     TrashStore.deletePermanently(db, entry)
                     deleting = null
+                    entries = TrashStore.entries(db)
                     onChanged()
                 }) { Text("Eliminar definitivamente", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (confirmEmpty) {
+        AlertDialog(
+            onDismissRequest = { confirmEmpty = false },
+            title = { Text("Vaciar papelera") },
+            text = { Text("Se eliminarán definitivamente ${entries.size} elementos. Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    TrashStore.emptyAll(db)
+                    confirmEmpty = false
+                    entries = emptyList()
+                    onChanged()
+                }) { Text("Vaciar definitivamente", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text("Cancelar") } }
         )
     }
 }

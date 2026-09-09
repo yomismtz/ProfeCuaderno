@@ -27,6 +27,20 @@ fun QuickGradeScreen(
     refresh: Int,
     onChanged: () -> Unit
 ) {
+    val finalized = remember(refresh, period.id) { EvaluationSetupStore.isFinalized(db, period.id) }
+    if (!finalized) {
+        Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+            ElevatedCard(Modifier.fillMaxWidth().widthIn(max = 620.dp)) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Captura rápida bloqueada", style = MaterialTheme.typography.titleLarge)
+                    Text("Primero finaliza el esquema de evaluación. Los porcentajes finales, las actividades/exámenes y las rúbricas deben sumar 100%.")
+                    Text("Puedes seguir guardando la configuración como borrador desde Rubros y rúbricas.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        return
+    }
+
     val students = remember(refresh, period.id) { db.getStudents(period.id) }
     val categories = remember(refresh, period.id) {
         db.getCategories(period.id).filter { WeightedEvaluationStore.kindFor(db, it) != null }
@@ -61,7 +75,7 @@ fun QuickGradeScreen(
         }
 
         if (categories.isEmpty()) {
-            Text("Primero crea un rubro de actividades o exámenes con porcentajes internos.")
+            Text("No hay rubros de actividades o exámenes disponibles para captura rápida.")
             return@Column
         }
 

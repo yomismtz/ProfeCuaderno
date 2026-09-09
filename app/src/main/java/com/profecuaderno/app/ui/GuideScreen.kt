@@ -61,8 +61,7 @@ fun GuideScreen(
             }.getOrDefault(false)
 
             val readable = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.read() }
-                true
+                context.contentResolver.openInputStream(uri)?.use { it.read() } != null
             }.getOrDefault(false)
 
             if (readable) {

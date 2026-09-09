@@ -381,6 +381,24 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
         writableDatabase.insertWithOnConflict("attendance_records", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun attendanceCounts(periodId: Long, studentId: Long): Map<AttendanceStatus, Int> {
+        val counts = AttendanceStatus.entries.associateWith { 0 }.toMutableMap()
+        val sql = """
+            SELECT ar.status, COUNT(*)
+            FROM attendance_records ar
+            JOIN attendance_sessions s ON s.id = ar.session_id
+            WHERE s.period_id=? AND s.worked=1 AND ar.student_id=?
+            GROUP BY ar.status
+        """.trimIndent()
+        readableDatabase.rawQuery(sql, arrayOf(periodId.toString(), studentId.toString())).use { cursor ->
+            while (cursor.moveToNext()) {
+                val status = runCatching { AttendanceStatus.valueOf(cursor.getString(0)) }.getOrNull()
+                if (status != null) counts[status] = cursor.getInt(1)
+            }
+        }
+        return counts
+    }
+
     fun attendancePercentage(periodId: Long, studentId: Long): Double {
         val db = readableDatabase
         val workedSessions = db.rawQuery("SELECT id FROM attendance_sessions WHERE period_id=? AND worked=1", arrayOf(periodId.toString()))

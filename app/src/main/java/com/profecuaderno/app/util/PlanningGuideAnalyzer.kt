@@ -49,6 +49,7 @@ object PlanningGuideAnalyzer {
             .distinctBy { "${it.date}|${it.title.lowercase(Locale.getDefault())}" }
             .sortedBy { it.date }
             .take(80)
+            .toList()
     }
 
     private fun buildTitle(line: String, type: String): String {

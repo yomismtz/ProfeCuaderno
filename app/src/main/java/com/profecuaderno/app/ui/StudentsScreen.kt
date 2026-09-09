@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.Student
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.data.TrashStore
 import com.profecuaderno.app.util.CsvStudentImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     var importing by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         ExternalActivityGuard.active = false
@@ -41,34 +43,25 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
             importMessage = "Importación cancelada."
             return@rememberLauncherForActivityResult
         }
-
         importing = true
         importMessage = null
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
                     val result = CsvStudentImporter.read(context, uri, period.id)
-                    if (result.error != null) {
-                        result.error
-                    } else if (result.students.isEmpty()) {
-                        "No encontré alumnos válidos en el archivo. Revisa que tenga una columna de nombre."
-                    } else {
+                    if (result.error != null) result.error
+                    else if (result.students.isEmpty()) "No encontré alumnos válidos en el archivo. Revisa que tenga una columna de nombre."
+                    else {
                         var saved = 0
                         var saveErrors = 0
-                        result.students.forEach { student ->
-                            runCatching { db.saveStudent(student) }
-                                .onSuccess { saved++ }
-                                .onFailure { saveErrors++ }
-                        }
+                        result.students.forEach { student -> runCatching { db.saveStudent(student) }.onSuccess { saved++ }.onFailure { saveErrors++ } }
                         buildString {
                             append("Importados: $saved")
                             if (result.skipped > 0) append(" · omitidos: ${result.skipped}")
                             if (saveErrors > 0) append(" · errores al guardar: $saveErrors")
                         }
                     }
-                }.getOrElse { error ->
-                    "No se pudo importar el CSV: ${error.message ?: "error de lectura del archivo"}."
-                }
+                }.getOrElse { error -> "No se pudo importar el CSV: ${error.message ?: "error de lectura del archivo"}." }
             }
             importMessage = outcome
             importing = false
@@ -79,53 +72,29 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     fun openCsvPicker() {
         importMessage = null
         ExternalActivityGuard.active = true
-        runCatching {
-            csvLauncher.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv"))
-        }.onFailure {
-            ExternalActivityGuard.active = false
-            importMessage = "No se pudo abrir el selector de archivos en este dispositivo."
-        }
+        runCatching { csvLauncher.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv")) }
+            .onFailure { ExternalActivityGuard.active = false; importMessage = "No se pudo abrir el selector de archivos en este dispositivo." }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { ExternalActivityGuard.active = false }
-    }
+    DisposableEffect(Unit) { onDispose { ExternalActivityGuard.active = false } }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { openCsvPicker() },
-                enabled = !importing
-            ) {
-                Icon(Icons.Default.UploadFile, null)
-                Spacer(Modifier.width(6.dp))
-                Text(if (importing) "Importando…" else "Importar CSV")
-            }
-            FilledTonalButton(onClick = { showNew = true }, enabled = !importing) {
-                Icon(Icons.Default.Add, null)
-                Spacer(Modifier.width(6.dp))
-                Text("Nuevo alumno")
-            }
-        }
-
-        importMessage?.let {
-            AssistChip(
-                onClick = { importMessage = null },
-                label = { Text(it) },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
-
-        Box(Modifier.fillMaxSize()) {
-            if (students.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Aún no hay alumnos en este periodo.")
+    Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { openCsvPicker() }, enabled = !importing) {
+                    Icon(Icons.Default.UploadFile, null); Spacer(Modifier.width(6.dp)); Text(if (importing) "Importando…" else "Importar CSV")
                 }
-            } else {
-                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = { showNew = true }, enabled = !importing) {
+                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Nuevo alumno")
+                }
+            }
+            importMessage?.let { AssistChip(onClick = { importMessage = null }, label = { Text(it) }, modifier = Modifier.padding(horizontal = 16.dp)) }
+            Box(Modifier.fillMaxSize()) {
+                if (students.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Aún no hay alumnos en este periodo.") }
+                else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { Spacer(Modifier.height(8.dp)) }
                     items(students, key = { it.id }) { student ->
                         ElevatedCard(Modifier.fillMaxWidth()) {
@@ -147,41 +116,30 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
         }
     }
 
-    if (showNew) StudentDialog(
-        title = "Nuevo alumno",
-        initial = Student(periodId = period.id, name = ""),
-        onDismiss = { showNew = false },
-        onSave = {
-            db.saveStudent(it)
-            showNew = false
-            onChanged()
-        }
-    )
+    if (showNew) StudentDialog(title = "Nuevo alumno", initial = Student(periodId = period.id, name = ""), onDismiss = { showNew = false }, onSave = { db.saveStudent(it); showNew = false; onChanged() })
 
     editing?.let { student ->
-        StudentDialog(
-            title = "Editar alumno",
-            initial = student,
-            onDismiss = { editing = null },
-            onSave = {
-                db.saveStudent(it)
-                editing = null
-                onChanged()
-            }
-        )
+        StudentDialog(title = "Editar alumno", initial = student, onDismiss = { editing = null }, onSave = { db.saveStudent(it); editing = null; onChanged() })
     }
 
     deleting?.let { student ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Eliminar alumno") },
-            text = { Text("¿Eliminar a ${student.name}? También se eliminarán sus asistencias y calificaciones de este periodo.") },
+            title = { Text("Enviar estudiante a Papelera") },
+            text = { Text("¿Enviar a ${student.name} a Papelera? Sus asistencias y calificaciones se conservarán para poder restaurarlas.") },
             confirmButton = {
                 TextButton(onClick = {
-                    db.deleteStudent(student.id)
+                    TrashStore.trashStudent(db, student)
                     deleting = null
                     onChanged()
-                }) { Text("Eliminar") }
+                    scope.launch {
+                        val result = snackbarHostState.showSnackbar("${student.name} enviado a Papelera", "Deshacer", duration = SnackbarDuration.Long)
+                        if (result == SnackbarResult.ActionPerformed) {
+                            TrashStore.entries(db).firstOrNull { it.type == TrashStore.TYPE_STUDENT && it.entityId == student.id }?.let { TrashStore.restore(db, it) }
+                            onChanged()
+                        }
+                    }
+                }) { Text("Enviar a Papelera", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
         )
@@ -217,12 +175,7 @@ private fun StudentDialog(title: String, initial: Student, onDismiss: () -> Unit
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = {
-                    onSave(initial.copy(name = name, studentCode = code, email = email, phone = phone, birthDate = birth, groupName = group, clinic = clinic, teamName = team, notes = notes))
-                }
-            ) { Text("Guardar") }
+            TextButton(enabled = name.isNotBlank(), onClick = { onSave(initial.copy(name = name, studentCode = code, email = email, phone = phone, birthDate = birth, groupName = group, clinic = clinic, teamName = team, notes = notes)) }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

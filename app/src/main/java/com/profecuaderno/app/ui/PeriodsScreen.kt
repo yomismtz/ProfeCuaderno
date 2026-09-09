@@ -84,7 +84,6 @@ fun PeriodsScreen(
         active = active,
         onDismiss = { showNew = false }
     ) { name, type, start, end, copyFrom ->
-        active?.let { db.closePeriod(it.id) }
         db.createPeriod(name, type, start, end, copyFrom, true)
         showNew = false
         onChanged()

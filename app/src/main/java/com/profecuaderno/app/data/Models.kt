@@ -48,12 +48,20 @@ data class AttendanceSession(
     val worked: Boolean
 )
 
+enum class EvaluationMode(val label: String) {
+    AVERAGE("Promedio de actividades"),
+    RUBRIC("Rúbrica"),
+    ATTENDANCE("Asistencia automática"),
+    DIRECT("Calificación directa")
+}
+
 data class EvaluationCategory(
     val id: Long,
     val periodId: Long,
     val name: String,
     val weight: Double,
-    val position: Int
+    val position: Int,
+    val mode: String = EvaluationMode.DIRECT.name
 )
 
 data class RubricCriterion(
@@ -61,6 +69,13 @@ data class RubricCriterion(
     val categoryId: Long,
     val name: String,
     val weight: Double,
+    val position: Int
+)
+
+data class AssessmentItem(
+    val id: Long,
+    val categoryId: Long,
+    val name: String,
     val position: Int
 )
 

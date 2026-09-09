@@ -49,49 +49,51 @@ fun GuideScreen(
     var pickerMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    fun handlePdf(uri: Uri?) {
         ExternalActivityGuard.active = false
-        if (uri != null) {
-            val persisted = runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-                true
-            }.getOrDefault(false)
+        if (uri == null) return
 
-            val readable = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.read() } != null
-            }.getOrDefault(false)
+        val persisted = runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            true
+        }.getOrDefault(false)
 
-            if (readable) {
-                prefs.edit().putString(key, uri.toString()).apply()
-                uriString = uri.toString()
-                pickerMessage = if (persisted) {
-                    "Documento seleccionado correctamente."
-                } else {
-                    "Documento seleccionado. Android no permitió conservar el permiso permanente; si deja de abrir, vuelve a seleccionarlo."
-                }
+        val readable = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.read() } != null
+        }.getOrDefault(false)
+
+        if (readable) {
+            prefs.edit().putString(key, uri.toString()).apply()
+            uriString = uri.toString()
+            pickerMessage = if (persisted) {
+                "Documento seleccionado correctamente."
             } else {
-                pickerMessage = "No pude leer ese archivo. Elige un PDF almacenado en el dispositivo o en un proveedor compatible."
+                "Documento seleccionado. Android no permitió conservar el permiso permanente; si deja de abrir, vuelve a seleccionarlo."
             }
+        } else {
+            pickerMessage = "No pude leer ese archivo. Elige un PDF almacenado en el dispositivo o en un proveedor compatible."
         }
     }
+
+    val openDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), ::handlePdf)
+    val getContentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), ::handlePdf)
 
     fun openPicker() {
         pickerMessage = null
         ExternalActivityGuard.active = true
         runCatching {
-            launcher.launch(arrayOf("application/pdf"))
+            openDocumentLauncher.launch(arrayOf("application/pdf"))
         }.onFailure {
-            ExternalActivityGuard.active = false
-            pickerMessage = "No se pudo abrir el selector de documentos en este dispositivo."
+            runCatching {
+                getContentLauncher.launch("application/pdf")
+            }.onFailure {
+                ExternalActivityGuard.active = false
+                pickerMessage = "No encontré un selector de archivos compatible. Instala o habilita la app Archivos de Android y vuelve a intentarlo."
+            }
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { ExternalActivityGuard.active = false }
-    }
+    DisposableEffect(Unit) { onDispose { ExternalActivityGuard.active = false } }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(18.dp),
@@ -136,9 +138,7 @@ fun GuideScreen(
                                 Spacer(Modifier.width(6.dp))
                                 Text("Visualizar")
                             }
-                            OutlinedButton(onClick = { openPicker() }) {
-                                Text("Cambiar PDF")
-                            }
+                            OutlinedButton(onClick = { openPicker() }) { Text("Cambiar PDF") }
                         }
                         Button(
                             enabled = !analyzing,
@@ -148,9 +148,7 @@ fun GuideScreen(
                                 analysisMessage = null
                                 scope.launch {
                                     val found = withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            PlanningGuideAnalyzer.analyze(context, Uri.parse(currentUri), period)
-                                        }.getOrElse { emptyList() }
+                                        runCatching { PlanningGuideAnalyzer.analyze(context, Uri.parse(currentUri), period) }.getOrElse { emptyList() }
                                     }
                                     suggestions = found
                                     selectedSuggestions = found.indices.toSet()
@@ -165,9 +163,7 @@ fun GuideScreen(
                             Spacer(Modifier.width(6.dp))
                             Text(if (analyzing) "Analizando…" else "Analizar guía")
                         }
-                        analysisMessage?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall)
-                        }
+                        analysisMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
@@ -185,10 +181,7 @@ fun GuideScreen(
                     teacherEventTypes.chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             row.forEach { option ->
-                                OutlinedButton(
-                                    onClick = { eventTypeToCreate = option.code },
-                                    modifier = Modifier.weight(1f)
-                                ) {
+                                OutlinedButton(onClick = { eventTypeToCreate = option.code }, modifier = Modifier.weight(1f)) {
                                     Text(option.label)
                                 }
                             }
@@ -199,9 +192,7 @@ fun GuideScreen(
         }
 
         if (events.isNotEmpty()) {
-            item {
-                Text("Fechas registradas para ${period.name}", style = MaterialTheme.typography.titleMedium)
-            }
+            item { Text("Fechas registradas para ${period.name}", style = MaterialTheme.typography.titleMedium) }
             items(events, key = { it.id }) { event ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -211,9 +202,7 @@ fun GuideScreen(
                             Text(eventTypeLabel(event.type), style = MaterialTheme.typography.bodySmall)
                             if (event.notes.isNotBlank()) Text(event.notes, style = MaterialTheme.typography.bodySmall)
                         }
-                        IconButton(onClick = { deleting = event }) {
-                            Icon(Icons.Default.Delete, "Eliminar")
-                        }
+                        IconButton(onClick = { deleting = event }) { Icon(Icons.Default.Delete, "Eliminar") }
                     }
                 }
             }
@@ -238,10 +227,7 @@ fun GuideScreen(
 
     if (suggestions.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = {
-                suggestions = emptyList()
-                selectedSuggestions = emptySet()
-            },
+            onDismissRequest = { suggestions = emptyList(); selectedSuggestions = emptySet() },
             title = { Text("Fechas detectadas") },
             text = {
                 Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
@@ -254,9 +240,7 @@ fun GuideScreen(
                                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.Top) {
                                     Checkbox(
                                         checked = index in selectedSuggestions,
-                                        onCheckedChange = { checked ->
-                                            selectedSuggestions = if (checked) selectedSuggestions + index else selectedSuggestions - index
-                                        }
+                                        onCheckedChange = { checked -> selectedSuggestions = if (checked) selectedSuggestions + index else selectedSuggestions - index }
                                     )
                                     Column(Modifier.weight(1f)) {
                                         Text("${suggestion.date} · ${eventTypeLabel(suggestion.type)}", style = MaterialTheme.typography.labelLarge)
@@ -274,16 +258,7 @@ fun GuideScreen(
                     onClick = {
                         selectedSuggestions.sorted().forEach { index ->
                             val suggestion = suggestions[index]
-                            db.saveEvent(
-                                CalendarEvent(
-                                    id = 0,
-                                    periodId = period.id,
-                                    title = suggestion.title,
-                                    date = suggestion.date,
-                                    notes = "Detectado desde la guía / planeación",
-                                    type = suggestion.type
-                                )
-                            )
+                            db.saveEvent(CalendarEvent(0, period.id, suggestion.title, suggestion.date, "Detectado desde la guía / planeación", suggestion.type))
                         }
                         analysisMessage = "Se agregaron ${selectedSuggestions.size} fechas al calendario."
                         suggestions = emptyList()
@@ -292,12 +267,7 @@ fun GuideScreen(
                     }
                 ) { Text("Agregar seleccionadas") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    suggestions = emptyList()
-                    selectedSuggestions = emptySet()
-                }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { suggestions = emptyList(); selectedSuggestions = emptySet() }) { Text("Cancelar") } }
         )
     }
 

@@ -7,14 +7,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.Student
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.util.CsvStudentImporter
 
 @Composable
 fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onChanged: () -> Unit) {
@@ -22,8 +27,43 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     var editing by remember { mutableStateOf<Student?>(null) }
     var showNew by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Student?>(null) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val result = CsvStudentImporter.read(context, uri, period.id)
+            result.students.forEach { db.saveStudent(it) }
+            importMessage = result.error ?: "Importados: ${result.students.size}${if (result.skipped > 0) " · omitidos: ${result.skipped}" else ""}"
+            onChanged()
+        }
+    }
 
-    Box(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(onClick = { csvLauncher.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel")) }) {
+                Icon(Icons.Default.UploadFile, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Importar CSV")
+            }
+            FilledTonalButton(onClick = { showNew = true }) {
+                Icon(Icons.Default.Add, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Nuevo alumno")
+            }
+        }
+
+        importMessage?.let {
+            AssistChip(
+                onClick = { importMessage = null },
+                label = { Text(it) },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+
+        Box(Modifier.fillMaxSize()) {
         if (students.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Aún no hay alumnos en este periodo.")
@@ -48,8 +88,6 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
                 item { Spacer(Modifier.height(90.dp)) }
             }
         }
-        FloatingActionButton(onClick = { showNew = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-            Icon(Icons.Default.Add, "Agregar alumno")
         }
     }
 

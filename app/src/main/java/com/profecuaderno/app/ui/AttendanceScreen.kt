@@ -26,10 +26,8 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Pase de lista", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(date, { date = it }, label = { Text("Fecha") }, placeholder = { Text("AAAA-MM-DD") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(title, { title = it }, label = { Text("Sesión") }, modifier = Modifier.weight(1f))
-                }
+                DatePickerField(date, { date = it }, "Fecha de la sesión")
+                OutlinedTextField(title, { title = it }, label = { Text("Sesión") }, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = worked, onCheckedChange = { worked = it })
                     Spacer(Modifier.width(8.dp))

@@ -75,7 +75,28 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
                 name TEXT NOT NULL,
                 weight REAL NOT NULL,
                 position INTEGER NOT NULL DEFAULT 0,
+                mode TEXT NOT NULL DEFAULT 'DIRECT',
                 FOREIGN KEY(period_id) REFERENCES periods(id) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE assessment_items(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(category_id) REFERENCES evaluation_categories(id) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE assessment_scores(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                item_id INTEGER NOT NULL,
+                score REAL NOT NULL,
+                UNIQUE(student_id, item_id),
+                FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
+                FOREIGN KEY(item_id) REFERENCES assessment_items(id) ON DELETE CASCADE
             )
         """.trimIndent())
         db.execSQL("""
@@ -126,7 +147,29 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Initial public prototype. Future migrations can be added here.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE evaluation_categories ADD COLUMN mode TEXT NOT NULL DEFAULT 'DIRECT'")
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS assessment_items(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(category_id) REFERENCES evaluation_categories(id) ON DELETE CASCADE
+                )
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS assessment_scores(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_id INTEGER NOT NULL,
+                    item_id INTEGER NOT NULL,
+                    score REAL NOT NULL,
+                    UNIQUE(student_id, item_id),
+                    FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY(item_id) REFERENCES assessment_items(id) ON DELETE CASCADE
+                )
+            """.trimIndent())
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -230,8 +273,19 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
                 put("name", old.name)
                 put("weight", old.weight)
                 put("position", old.position)
+                put("mode", old.mode)
             }
             val newCategoryId = db.insertOrThrow("evaluation_categories", null, catValues)
+            db.query("assessment_items", null, "category_id=?", arrayOf(old.id.toString()), null, null, "position,id").use { ac ->
+                while (ac.moveToNext()) {
+                    val values = ContentValues().apply {
+                        put("category_id", newCategoryId)
+                        put("name", ac.getString(ac.getColumnIndexOrThrow("name")))
+                        put("position", ac.getInt(ac.getColumnIndexOrThrow("position")))
+                    }
+                    db.insertOrThrow("assessment_items", null, values)
+                }
+            }
             db.query("rubric_criteria", null, "category_id=?", arrayOf(old.id.toString()), null, null, "position,id").use { rc ->
                 while (rc.moveToNext()) {
                     val values = ContentValues().apply {
@@ -359,6 +413,7 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
             put("name", category.name.trim())
             put("weight", category.weight)
             put("position", category.position)
+            put("mode", category.mode)
         }
         return if (category.id == 0L) writableDatabase.insertOrThrow("evaluation_categories", null, values)
         else {
@@ -372,6 +427,62 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
     }
 
     fun categoryWeightTotal(periodId: Long): Double = getCategories(periodId).sumOf { it.weight }
+
+    fun getAssessmentItems(categoryId: Long): List<AssessmentItem> {
+        val out = mutableListOf<AssessmentItem>()
+        readableDatabase.query("assessment_items", null, "category_id=?", arrayOf(categoryId.toString()), null, null, "position,id").use { c ->
+            while (c.moveToNext()) out += AssessmentItem(
+                id = c.getLong(c.getColumnIndexOrThrow("id")),
+                categoryId = c.getLong(c.getColumnIndexOrThrow("category_id")),
+                name = c.getString(c.getColumnIndexOrThrow("name")),
+                position = c.getInt(c.getColumnIndexOrThrow("position"))
+            )
+        }
+        return out
+    }
+
+    fun saveAssessmentItem(item: AssessmentItem): Long {
+        val values = ContentValues().apply {
+            put("category_id", item.categoryId)
+            put("name", item.name.trim())
+            put("position", item.position)
+        }
+        return if (item.id == 0L) writableDatabase.insertOrThrow("assessment_items", null, values)
+        else {
+            writableDatabase.update("assessment_items", values, "id=?", arrayOf(item.id.toString()))
+            item.id
+        }
+    }
+
+    fun deleteAssessmentItem(itemId: Long) {
+        writableDatabase.delete("assessment_items", "id=?", arrayOf(itemId.toString()))
+    }
+
+    fun getAssessmentScore(studentId: Long, itemId: Long): Double? {
+        readableDatabase.query("assessment_scores", arrayOf("score"), "student_id=? AND item_id=?", arrayOf(studentId.toString(), itemId.toString()), null, null, null).use { c ->
+            return if (c.moveToFirst()) c.getDouble(0) else null
+        }
+    }
+
+    fun setAssessmentScore(studentId: Long, itemId: Long, score: Double?) {
+        if (score == null) {
+            writableDatabase.delete("assessment_scores", "student_id=? AND item_id=?", arrayOf(studentId.toString(), itemId.toString()))
+            return
+        }
+        val values = ContentValues().apply {
+            put("student_id", studentId)
+            put("item_id", itemId)
+            put("score", score.coerceIn(0.0, 100.0))
+        }
+        writableDatabase.insertWithOnConflict("assessment_scores", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun calculateAndStoreAverageGrade(periodId: Long, studentId: Long, categoryId: Long): Double {
+        val scores = getAssessmentItems(categoryId).mapNotNull { getAssessmentScore(studentId, it.id) }
+        val average = if (scores.isEmpty()) 0.0 else scores.average()
+        setGrade(periodId, studentId, categoryId, average)
+        return average
+    }
 
     fun getRubricCriteria(categoryId: Long): List<RubricCriterion> {
         val out = mutableListOf<RubricCriterion>()
@@ -446,9 +557,20 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
         return total
     }
 
+    fun categoryScore(periodId: Long, studentId: Long, category: EvaluationCategory): Double {
+        return when (runCatching { EvaluationMode.valueOf(category.mode) }.getOrDefault(EvaluationMode.DIRECT)) {
+            EvaluationMode.ATTENDANCE -> attendancePercentage(periodId, studentId)
+            EvaluationMode.AVERAGE -> {
+                val scores = getAssessmentItems(category.id).mapNotNull { getAssessmentScore(studentId, it.id) }
+                if (scores.isEmpty()) 0.0 else scores.average()
+            }
+            else -> getGrade(studentId, category.id)
+        }
+    }
+
     fun finalPercentage(periodId: Long, studentId: Long): Double {
         return getCategories(periodId).sumOf { category ->
-            getGrade(studentId, category.id) * category.weight / 100.0
+            categoryScore(periodId, studentId, category) * category.weight / 100.0
         }.coerceIn(0.0, 100.0)
     }
 
@@ -539,11 +661,12 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
         periodId = getLong(getColumnIndexOrThrow("period_id")),
         name = getString(getColumnIndexOrThrow("name")),
         weight = getDouble(getColumnIndexOrThrow("weight")),
-        position = getInt(getColumnIndexOrThrow("position"))
+        position = getInt(getColumnIndexOrThrow("position")),
+        mode = getString(getColumnIndexOrThrow("mode"))
     )
 
     companion object {
         private const val DB_NAME = "profecuaderno.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
     }
 }

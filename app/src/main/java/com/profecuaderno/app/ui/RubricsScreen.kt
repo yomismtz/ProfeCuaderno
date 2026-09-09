@@ -279,7 +279,19 @@ private fun CategoryDialog(
                 suggestions.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { suggestion ->
-                            AssistChip(onClick = { name = suggestion }, label = { Text(suggestion) })
+                            AssistChip(
+                                onClick = {
+                                    name = suggestion
+                                    mode = when (suggestion) {
+                                        "Exámenes", "Tareas" -> EvaluationMode.AVERAGE
+                                        "Asistencias" -> EvaluationMode.ATTENDANCE
+                                        "Investigación", "Exposiciones", "Maquetas",
+                                        "Laboratorios", "Actividades prácticas", "Teoría", "Trabajos" -> EvaluationMode.RUBRIC
+                                        else -> mode
+                                    }
+                                },
+                                label = { Text(suggestion) }
+                            )
                         }
                     }
                 }

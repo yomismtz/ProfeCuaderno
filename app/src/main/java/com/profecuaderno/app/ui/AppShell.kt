@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.GradeHistoryStore
+import com.profecuaderno.app.data.SyncMetadataStore
 import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.data.TrashStore
 
@@ -53,6 +54,7 @@ fun ProfeCuadernoApp(
     remember(db) {
         TrashStore.ensure(db)
         GradeHistoryStore.ensure(db)
+        SyncMetadataStore.ensure(db)
         true
     }
 

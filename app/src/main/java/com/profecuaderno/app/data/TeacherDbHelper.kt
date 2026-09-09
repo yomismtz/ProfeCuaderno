@@ -648,15 +648,31 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
     }
 
     fun birthdaysForPeriod(periodId: Long): List<CalendarEvent> {
-        val students = getStudents(periodId)
-        val year = runCatching { getActivePeriod()?.startDate?.take(4)?.toInt() }.getOrNull() ?: LocalDate.now().year
-        return students.mapNotNull { student ->
-            val parts = student.birthDate.split("-")
-            if (parts.size != 3) null else {
-                val date = "%04d-%s-%s".format(year, parts[1], parts[2])
-                CalendarEvent(-student.id, periodId, "🎂 ${student.name}", date, "Cumpleaños", "CUMPLEAÑOS")
+        val group = getPeriods().firstOrNull { it.id == periodId }
+        val start = runCatching { LocalDate.parse(group?.startDate) }.getOrNull()
+        val end = runCatching { LocalDate.parse(group?.endDate) }.getOrNull()
+        val startYear = start?.year ?: LocalDate.now().year
+        val endYear = end?.year ?: startYear
+        val out = mutableListOf<CalendarEvent>()
+
+        getStudents(periodId).forEach { student ->
+            val born = runCatching { LocalDate.parse(student.birthDate) }.getOrNull() ?: return@forEach
+            for (year in startYear..endYear) {
+                val birthday = runCatching { born.withYear(year) }.getOrNull() ?: continue
+                val inRange = (start == null || !birthday.isBefore(start)) && (end == null || !birthday.isAfter(end))
+                if (inRange) {
+                    out += CalendarEvent(
+                        id = -(student.id * 10000 + year),
+                        periodId = periodId,
+                        title = "🎂 ${student.name}",
+                        date = birthday.toString(),
+                        notes = "Cumpleaños",
+                        type = "CUMPLEAÑOS"
+                    )
+                }
             }
         }
+        return out
     }
 
     fun summaries(periodId: Long): List<StudentSummary> = getStudents(periodId).map { student ->

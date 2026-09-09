@@ -7,7 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,16 +17,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.R
 
 private const val PROFILE_PREFS = "teacher_profile_extras"
 private const val KEY_TEACHING_LEVEL = "teaching_level"
 private const val KEY_AVATAR = "avatar_index"
+private const val AVATAR_WIDTH = 196
+private const val AVATAR_HEIGHT = 132
 
 fun loadTeachingLevel(context: Context): String =
     context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE).getString(KEY_TEACHING_LEVEL, "").orEmpty()
@@ -42,20 +48,19 @@ private fun saveTeacherAvatar(context: Context, value: Int) {
     context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_AVATAR, value).apply()
 }
 
-private val teacherAvatars = listOf(
-    R.drawable.avatar_01,
-    R.drawable.avatar_02,
-    R.drawable.avatar_03,
-    R.drawable.avatar_04,
-    R.drawable.avatar_05,
-    R.drawable.avatar_06,
-    R.drawable.avatar_07,
-    R.drawable.avatar_08,
-    R.drawable.avatar_09,
-    R.drawable.avatar_10,
-    R.drawable.avatar_11,
-    R.drawable.avatar_12
-)
+@Composable
+private fun avatarPainter(sheet: ImageBitmap, number: Int): BitmapPainter {
+    val index = (number - 1).coerceIn(0, 11)
+    val column = index % 4
+    val row = index / 4
+    return remember(sheet, number) {
+        BitmapPainter(
+            image = sheet,
+            srcOffset = IntOffset(column * AVATAR_WIDTH, row * AVATAR_HEIGHT),
+            srcSize = IntSize(AVATAR_WIDTH, AVATAR_HEIGHT)
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +92,7 @@ fun TeachingLevelSelector(value: String, onValueChange: (String) -> Unit) {
 @Composable
 fun TeacherPhotoPicker() {
     val context = LocalContext.current
+    val sheet = ImageBitmap.imageResource(R.drawable.avatar_sheet)
     var selected by remember { mutableIntStateOf(loadTeacherAvatar(context)) }
 
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -96,13 +102,12 @@ fun TeacherPhotoPicker() {
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 430.dp),
+            modifier = Modifier.fillMaxWidth().height(380.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             userScrollEnabled = false
         ) {
-            itemsIndexed(teacherAvatars) { index, resId ->
-                val number = index + 1
+            items((1..12).toList()) { number ->
                 val chosen = selected == number
                 Surface(
                     modifier = Modifier
@@ -117,7 +122,7 @@ fun TeacherPhotoPicker() {
                     tonalElevation = if (chosen) 4.dp else 1.dp
                 ) {
                     Image(
-                        painter = painterResource(resId),
+                        painter = avatarPainter(sheet, number),
                         contentDescription = "Avatar $number",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -138,10 +143,11 @@ fun TeacherPhotoPicker() {
 fun TeacherAvatar(modifier: Modifier = Modifier, size: Dp = 72.dp) {
     val context = LocalContext.current
     val selected = loadTeacherAvatar(context)
+    val sheet = ImageBitmap.imageResource(R.drawable.avatar_sheet)
     Surface(shape = CircleShape, tonalElevation = 2.dp, modifier = modifier.size(size)) {
-        if (selected in 1..teacherAvatars.size) {
+        if (selected in 1..12) {
             Image(
-                painter = painterResource(teacherAvatars[selected - 1]),
+                painter = avatarPainter(sheet, selected),
                 contentDescription = "Avatar del docente",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().clip(CircleShape)

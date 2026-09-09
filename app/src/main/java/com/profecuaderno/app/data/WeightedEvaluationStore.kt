@@ -75,8 +75,7 @@ object WeightedEvaluationStore {
         setKind(db, category.id, kind)
         ensureEvenWeightsIfMissing(db, category.id)
         db.getStudents(category.periodId).forEach { student ->
-            val score = weightedScore(db, student.id, category.id)
-            db.setGrade(category.periodId, student.id, category.id, score)
+            recalculateStudent(db, category.periodId, student.id, category.id)
         }
         db.saveCategory(category.copy(mode = EvaluationMode.DIRECT.name))
     }
@@ -124,7 +123,7 @@ object WeightedEvaluationStore {
         }
     }
 
-    fun weightedScore(db: TeacherDbHelper, studentId: Long, categoryId: Long): Double {
+    fun weightedScoreOrNull(db: TeacherDbHelper, studentId: Long, categoryId: Long): Double? {
         val items = db.getAssessmentItems(categoryId)
         var weighted = 0.0
         var registeredWeight = 0.0
@@ -136,11 +135,22 @@ object WeightedEvaluationStore {
                 registeredWeight += weight
             }
         }
-        return if (registeredWeight <= 0.0) 0.0 else (weighted / registeredWeight).coerceIn(0.0, 100.0)
+        return if (registeredWeight <= 0.0) null else (weighted / registeredWeight).coerceIn(0.0, 100.0)
     }
 
+    fun weightedScore(db: TeacherDbHelper, studentId: Long, categoryId: Long): Double =
+        weightedScoreOrNull(db, studentId, categoryId) ?: 0.0
+
     fun recalculateStudent(db: TeacherDbHelper, periodId: Long, studentId: Long, categoryId: Long): Double {
-        val score = weightedScore(db, studentId, categoryId)
+        val score = weightedScoreOrNull(db, studentId, categoryId)
+        if (score == null) {
+            db.writableDatabase.delete(
+                "grades",
+                "period_id=? AND student_id=? AND category_id=?",
+                arrayOf(periodId.toString(), studentId.toString(), categoryId.toString())
+            )
+            return 0.0
+        }
         db.setGrade(periodId, studentId, categoryId, score)
         return score
     }
@@ -150,6 +160,9 @@ object WeightedEvaluationStore {
             recalculateStudent(db, category.periodId, student.id, category.id)
         }
     }
+
+    fun pendingCount(db: TeacherDbHelper, studentId: Long, categoryId: Long): Int =
+        db.getAssessmentItems(categoryId).count { db.getAssessmentScore(studentId, it.id) == null }
 
     fun isConfigured(db: TeacherDbHelper, categoryId: Long): Boolean =
         abs(weightTotal(db, categoryId) - 100.0) < 0.001

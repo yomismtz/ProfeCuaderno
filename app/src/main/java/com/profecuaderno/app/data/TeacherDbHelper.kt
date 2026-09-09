@@ -2,11 +2,14 @@ package com.profecuaderno.app.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.time.LocalDate
 
-class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationContext, DB_NAME, null, DB_VERSION) {
+
+    private val appContext = context.applicationContext
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -175,6 +178,50 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
+    }
+
+    fun exportBackup(uri: Uri): Boolean {
+        return runCatching {
+            writableDatabase.rawQuery("PRAGMA wal_checkpoint(FULL)", null).close()
+            close()
+            val dbFile = appContext.getDatabasePath(DB_NAME)
+            appContext.contentResolver.openOutputStream(uri, "w")?.use { out ->
+                dbFile.inputStream().use { input -> input.copyTo(out) }
+            } ?: error("No se pudo abrir el archivo de destino.")
+            readableDatabase
+            true
+        }.getOrElse {
+            runCatching { readableDatabase }
+            false
+        }
+    }
+
+    fun importBackup(uri: Uri): Boolean {
+        return runCatching {
+            val temp = java.io.File(appContext.cacheDir, "profecuaderno_restore.db")
+            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                temp.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("No se pudo leer la copia de seguridad.")
+
+            val testDb = SQLiteDatabase.openDatabase(temp.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+            testDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher'", null).use { cursor ->
+                if (!cursor.moveToFirst()) error("El archivo no es una copia válida de ProfeCuaderno.")
+            }
+            testDb.close()
+
+            close()
+            val dbFile = appContext.getDatabasePath(DB_NAME)
+            dbFile.parentFile?.mkdirs()
+            java.io.File(dbFile.absolutePath + "-wal").delete()
+            java.io.File(dbFile.absolutePath + "-shm").delete()
+            temp.copyTo(dbFile, overwrite = true)
+            temp.delete()
+            readableDatabase
+            true
+        }.getOrElse {
+            runCatching { readableDatabase }
+            false
+        }
     }
 
     fun getTeacher(): Teacher? {

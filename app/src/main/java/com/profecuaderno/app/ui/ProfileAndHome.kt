@@ -68,6 +68,7 @@ fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Mi perfil docente", style = MaterialTheme.typography.titleLarge)
         Text("Estos datos se muestran en tu cuaderno y pueden editarse cuando lo necesites.")
+        NotificationPermissionCard()
         OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
         DegreeSelector(degree, { degree = it }, "Grado profesional")
         DatePickerField(birth, { birth = it }, "Fecha de nacimiento")

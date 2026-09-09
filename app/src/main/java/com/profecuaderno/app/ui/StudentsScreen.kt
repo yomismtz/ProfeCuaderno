@@ -20,6 +20,9 @@ import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.Student
 import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.util.CsvStudentImporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onChanged: () -> Unit) {
@@ -28,14 +31,64 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     var showNew by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Student?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var importing by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val result = CsvStudentImporter.read(context, uri, period.id)
-            result.students.forEach { db.saveStudent(it) }
-            importMessage = result.error ?: "Importados: ${result.students.size}${if (result.skipped > 0) " · omitidos: ${result.skipped}" else ""}"
+        ExternalActivityGuard.active = false
+        if (uri == null) {
+            importMessage = "Importación cancelada."
+            return@rememberLauncherForActivityResult
+        }
+
+        importing = true
+        importMessage = null
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    val result = CsvStudentImporter.read(context, uri, period.id)
+                    if (result.error != null) {
+                        result.error
+                    } else if (result.students.isEmpty()) {
+                        "No encontré alumnos válidos en el archivo. Revisa que tenga una columna de nombre."
+                    } else {
+                        var saved = 0
+                        var saveErrors = 0
+                        result.students.forEach { student ->
+                            runCatching { db.saveStudent(student) }
+                                .onSuccess { saved++ }
+                                .onFailure { saveErrors++ }
+                        }
+                        buildString {
+                            append("Importados: $saved")
+                            if (result.skipped > 0) append(" · omitidos: ${result.skipped}")
+                            if (saveErrors > 0) append(" · errores al guardar: $saveErrors")
+                        }
+                    }
+                }.getOrElse { error ->
+                    "No se pudo importar el CSV: ${error.message ?: "error de lectura del archivo"}."
+                }
+            }
+            importMessage = outcome
+            importing = false
             onChanged()
         }
+    }
+
+    fun openCsvPicker() {
+        importMessage = null
+        ExternalActivityGuard.active = true
+        runCatching {
+            csvLauncher.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv"))
+        }.onFailure {
+            ExternalActivityGuard.active = false
+            importMessage = "No se pudo abrir el selector de archivos en este dispositivo."
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { ExternalActivityGuard.active = false }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -43,12 +96,15 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(onClick = { csvLauncher.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel")) }) {
+            OutlinedButton(
+                onClick = { openCsvPicker() },
+                enabled = !importing
+            ) {
                 Icon(Icons.Default.UploadFile, null)
                 Spacer(Modifier.width(6.dp))
-                Text("Importar CSV")
+                Text(if (importing) "Importando…" else "Importar CSV")
             }
-            FilledTonalButton(onClick = { showNew = true }) {
+            FilledTonalButton(onClick = { showNew = true }, enabled = !importing) {
                 Icon(Icons.Default.Add, null)
                 Spacer(Modifier.width(6.dp))
                 Text("Nuevo alumno")
@@ -64,30 +120,30 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
         }
 
         Box(Modifier.fillMaxSize()) {
-        if (students.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Aún no hay alumnos en este periodo.")
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Spacer(Modifier.height(8.dp)) }
-                items(students, key = { it.id }) { student ->
-                    ElevatedCard(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(student.name, style = MaterialTheme.typography.titleMedium)
-                                val second = listOf(student.groupName, student.clinic, student.teamName).filter { it.isNotBlank() }.joinToString(" • ")
-                                if (second.isNotBlank()) Text(second, style = MaterialTheme.typography.bodySmall)
-                                if (student.email.isNotBlank()) Text(student.email, style = MaterialTheme.typography.bodySmall)
+            if (students.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Aún no hay alumnos en este periodo.")
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { Spacer(Modifier.height(8.dp)) }
+                    items(students, key = { it.id }) { student ->
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(student.name, style = MaterialTheme.typography.titleMedium)
+                                    val second = listOf(student.groupName, student.clinic, student.teamName).filter { it.isNotBlank() }.joinToString(" • ")
+                                    if (second.isNotBlank()) Text(second, style = MaterialTheme.typography.bodySmall)
+                                    if (student.email.isNotBlank()) Text(student.email, style = MaterialTheme.typography.bodySmall)
+                                }
+                                IconButton(onClick = { editing = student }) { Icon(Icons.Default.Edit, "Editar") }
+                                IconButton(onClick = { deleting = student }) { Icon(Icons.Default.Delete, "Eliminar") }
                             }
-                            IconButton(onClick = { editing = student }) { Icon(Icons.Default.Edit, "Editar") }
-                            IconButton(onClick = { deleting = student }) { Icon(Icons.Default.Delete, "Eliminar") }
                         }
                     }
+                    item { Spacer(Modifier.height(90.dp)) }
                 }
-                item { Spacer(Modifier.height(90.dp)) }
             }
-        }
         }
     }
 

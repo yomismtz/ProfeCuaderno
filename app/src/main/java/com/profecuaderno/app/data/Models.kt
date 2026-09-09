@@ -49,9 +49,9 @@ data class AttendanceSession(
 )
 
 enum class EvaluationMode(val label: String) {
-    AVERAGE("Promedio de actividades"),
+    AVERAGE("Promedio de actividades / exámenes"),
     RUBRIC("Rúbrica"),
-    ATTENDANCE("Asistencia automática"),
+    ATTENDANCE("Reporte de asistencia"),
     DIRECT("Calificación directa")
 }
 

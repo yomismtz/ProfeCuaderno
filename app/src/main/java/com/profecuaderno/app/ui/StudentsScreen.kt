@@ -115,7 +115,7 @@ private fun StudentDialog(title: String, initial: Student, onDismiss: () -> Unit
                 OutlinedTextField(code, { code = it }, label = { Text("Matrícula / ID") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(birth, { birth = it }, label = { Text("Nacimiento") }, placeholder = { Text("AAAA-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
                 OutlinedTextField(group, { group = it }, label = { Text("Grupo") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(clinic, { clinic = it }, label = { Text("Clínica / sección / salón") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(team, { team = it }, label = { Text("Equipo") }, modifier = Modifier.fillMaxWidth())

@@ -19,9 +19,18 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
                 var refresh by remember { mutableIntStateOf(0) }
                 val teacher = remember(refresh) { db.getTeacher() }
+                val introPrefs = remember { context.getSharedPreferences("onboarding", 0) }
+                var introSeen by remember { mutableStateOf(introPrefs.getBoolean("intro_seen_v1", false)) }
 
                 NotebookBackground {
-                    if (teacher == null) {
+                    if (!introSeen) {
+                        OnboardingScreen(
+                            onStart = {
+                                introPrefs.edit().putBoolean("intro_seen_v1", true).apply()
+                                introSeen = true
+                            }
+                        )
+                    } else if (teacher == null) {
                         TeacherSetupScreen(
                             onSave = {
                                 db.saveTeacher(it)

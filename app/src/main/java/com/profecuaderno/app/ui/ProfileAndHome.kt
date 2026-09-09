@@ -132,8 +132,21 @@ fun HomeScreen(
     val configuration = LocalConfiguration.current
     val landscape = configuration.screenWidthDp > configuration.screenHeightDp
     val columns = if (landscape) 3 else 1
-    val today = LocalDate.now().toString()
+    val todayDate = LocalDate.now()
+    val today = todayDate.toString()
     val todaySession = remember(refresh, period?.id) { period?.let { db.getAttendanceSession(it.id, today) } }
+    val todayEvents = remember(refresh) { db.eventsOn(today) }
+    val todayBirthdays = remember(refresh) { db.birthdaysOn(todayDate) }
+    val groupsToday = remember(refresh) {
+        db.getOpenGroups().filter { group ->
+            val start = runCatching { LocalDate.parse(group.startDate) }.getOrNull()
+            val end = runCatching { LocalDate.parse(group.endDate) }.getOrNull()
+            (start == null || !todayDate.isBefore(start)) && (end == null || !todayDate.isAfter(end))
+        }
+    }
+    val attendancePending = remember(refresh, groupsToday.map { it.id }) {
+        groupsToday.filter { db.getAttendanceSession(it.id, today) == null }
+    }
 
     val actions = listOf(
         FolderAction(
@@ -160,6 +173,27 @@ fun HomeScreen(
                 Spacer(Modifier.height(4.dp))
                 Text("Crea tus grupos y organiza cada uno por carpetas.")
                 if (teacher.institution.isNotBlank()) Text(teacher.institution, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (todayEvents.isEmpty() && todayBirthdays.isEmpty() && attendancePending.isEmpty()) {
+                    Text("No hay actividades ni avisos pendientes para hoy.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    todayEvents.take(4).forEach { (group, event) ->
+                        Text("• ${eventTypeLabel(event.type)}: ${event.title} · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    todayBirthdays.take(4).forEach { (group, student) ->
+                        Text("• 🎂 Cumpleaños de ${student.name} · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    attendancePending.take(4).forEach { group ->
+                        Text("• Falta pasar asistencia · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    val extra = (todayEvents.size - 4).coerceAtLeast(0) + (todayBirthdays.size - 4).coerceAtLeast(0) + (attendancePending.size - 4).coerceAtLeast(0)
+                    if (extra > 0) Text("+ $extra avisos más", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
         Spacer(Modifier.height(16.dp))

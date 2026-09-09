@@ -1,23 +1,44 @@
 package com.profecuaderno.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.Teacher
 import com.profecuaderno.app.data.TeacherDbHelper
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val Lavender = Color(0xFFEDE4FB)
+private val Mint = Color(0xFFDDF7F4)
+private val Blush = Color(0xFFFCE3EE)
+private val Sky = Color(0xFFE5F1FF)
+private val Cream = Color(0xFFFFF4D9)
+private val SoftPurple = Color(0xFFD8C6F2)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,14 +50,16 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
     var email by remember { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        ElevatedCard(Modifier.widthIn(max = 620.dp)) {
+        ElevatedCard(Modifier.widthIn(max = 620.dp), shape = RoundedCornerShape(28.dp)) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.MenuBook, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
+                    Surface(color = Mint, shape = RoundedCornerShape(18.dp)) {
+                        Icon(Icons.Default.School, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(12.dp).size(38.dp))
+                    }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("ProfeCuaderno", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Tu cuaderno docente digital")
+                        Text("Mi Agenda Docente", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Planea · Organiza · Asiste · Evalúa")
                     }
                 }
                 HorizontalDivider()
@@ -49,8 +72,9 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
                 Button(
                     onClick = { onSave(Teacher(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
                     enabled = name.isNotBlank() && degree.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Entrar a mi cuaderno") }
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp)
+                ) { Text("Entrar a Mi Agenda Docente") }
             }
         }
     }
@@ -67,7 +91,7 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
 
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Mi perfil docente", style = MaterialTheme.typography.titleLarge)
-        Text("Estos datos se muestran en tu cuaderno y pueden editarse cuando lo necesites.")
+        Text("Estos datos se muestran en tu agenda y pueden editarse cuando lo necesites.")
         NotificationPermissionCard()
         OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
         DegreeSelector(degree, { degree = it }, "Grado profesional")
@@ -77,9 +101,10 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = { onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
-                enabled = name.isNotBlank() && degree.isNotBlank()
+                enabled = name.isNotBlank() && degree.isNotBlank(),
+                shape = RoundedCornerShape(16.dp)
             ) { Text("Guardar cambios") }
-            OutlinedButton(onClick = onSecurity) {
+            OutlinedButton(onClick = onSecurity, shape = RoundedCornerShape(16.dp)) {
                 Text("Seguridad y respaldo")
             }
         }
@@ -123,7 +148,13 @@ private fun DegreeSelector(value: String, onValueChange: (String) -> Unit, label
     }
 }
 
-private data class FolderAction(val title: String, val subtitle: String, val action: () -> Unit)
+private data class FolderAction(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val tint: Color,
+    val action: () -> Unit
+)
 
 @Composable
 fun HomeScreen(
@@ -137,7 +168,7 @@ fun HomeScreen(
 ) {
     val configuration = LocalConfiguration.current
     val landscape = configuration.screenWidthDp > configuration.screenHeightDp
-    val columns = if (landscape) 3 else 1
+    val columns = if (landscape) 3 else 2
     val todayDate = LocalDate.now()
     val today = todayDate.toString()
     val todaySession = remember(refresh, period?.id) { period?.let { db.getAttendanceSession(it.id, today) } }
@@ -179,68 +210,72 @@ fun HomeScreen(
     }
 
     val actions = listOf(
-        FolderAction(
-            "Grupos",
-            if (period == null) "Crea tu primer grupo" else "Grupo actual: ${period.name}",
-            onPrograms
-        ),
-        FolderAction(
-            "Calendario",
-            if (period == null) "Crea un grupo para usar la agenda" else if (todaySession == null) "Fechas, entregas y cumpleaños" else "Hoy ya tiene registro de asistencia",
-            onCalendar
-        ),
-        FolderAction(
-            "Mi perfil docente",
-            "${teacher.degree} ${teacher.name}",
-            onProfile
-        )
+        FolderAction("Grupos", if (period == null) "Crea tu primer grupo" else "Grupo actual: ${period.name}", Icons.Default.Groups, Mint, onPrograms),
+        FolderAction("Calendario", if (period == null) "Agenda y fechas importantes" else if (todaySession == null) "Fechas, entregas y cumpleaños" else "Asistencia de hoy registrada", Icons.Default.CalendarMonth, Lavender, onCalendar),
+        FolderAction("Mi perfil", "Datos y configuración docente", Icons.Default.Person, Blush, onProfile)
     )
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp)) {
-                Text("ProfeCuaderno", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("Crea tus grupos y organiza cada uno por carpetas.")
-                if (teacher.institution.isNotBlank()) Text(teacher.institution, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (todayEvents.isEmpty() && todayBirthdays.isEmpty() && attendancePending.isEmpty() && pendingEvaluations == 0) {
-                    Text("No hay actividades ni avisos pendientes para hoy.", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    todayEvents.take(4).forEach { (group, event) ->
-                        Text("• ${eventTypeLabel(event.type)}: ${event.title} · ${group.name}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    todayBirthdays.take(4).forEach { (group, student) ->
-                        Text("• 🎂 Cumpleaños de ${student.name} · ${group.name}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    attendancePending.take(4).forEach { group ->
-                        Text("• Falta pasar asistencia · ${group.name}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (pendingEvaluations > 0) {
-                        Text("• $pendingEvaluations evaluaciones pendientes de captura", style = MaterialTheme.typography.bodySmall)
-                    }
-                    val extra = (todayEvents.size - 4).coerceAtLeast(0) + (todayBirthdays.size - 4).coerceAtLeast(0) + (attendancePending.size - 4).coerceAtLeast(0)
-                    if (extra > 0) Text("+ $extra avisos más", style = MaterialTheme.typography.labelSmall)
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 2.dp
+        ) {
+            Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = Mint, shape = RoundedCornerShape(22.dp)) {
+                    Icon(Icons.Default.School, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(14.dp).size(42.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("¡Hola, Profe!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Mi Agenda Docente", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("Planea · Organiza · Asiste · Evalúa", style = MaterialTheme.typography.bodySmall)
+                    if (teacher.institution.isNotBlank()) Text(teacher.institution, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Hoy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    todayDate.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("es", "MX"))).replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (todayEvents.isEmpty() && todayBirthdays.isEmpty() && attendancePending.isEmpty() && pendingEvaluations == 0) {
+                    Text("No hay actividades ni avisos pendientes para hoy.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    todayEvents.take(3).forEach { (group, event) ->
+                        Text("• ${eventTypeLabel(event.type)}: ${event.title} · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    todayBirthdays.take(3).forEach { (group, student) ->
+                        Text("• 🎂 Cumpleaños de ${student.name} · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    attendancePending.take(3).forEach { group ->
+                        Text("• Falta pasar asistencia · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (pendingEvaluations > 0) Text("• $pendingEvaluations evaluaciones pendientes de captura", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
         ) {
             items(actions) { item ->
-                ElevatedCard(onClick = item.action, modifier = Modifier.height(145.dp)) {
-                    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                ElevatedCard(onClick = item.action, modifier = Modifier.height(138.dp), shape = RoundedCornerShape(24.dp)) {
+                    Column(
+                        Modifier.fillMaxSize().background(item.tint).padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Icon(item.icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
                         Column {
-                            Text(item.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(item.subtitle, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -265,38 +300,56 @@ fun ProgramHomeScreen(
     val columns = if (landscape) 3 else 2
 
     val folders = listOf(
-        FolderAction("Alumnos", "Datos, correo, teléfono, grupo y cumpleaños", onStudents),
-        FolderAction("Asistencia", "Pase de lista y porcentaje sobre días trabajados", onAttendance),
-        FolderAction("Evaluación", "Captura calificaciones y calcula el 100%", onEvaluation),
-        FolderAction("Rubros y rúbricas", "Rubros del 100%, criterios, ideas y porcentajes editables", onRubrics),
-        FolderAction("Guía / planeación", "Sube y consulta el documento principal del curso", onGuide),
-        FolderAction("Reportes", "Concentrado de asistencia y calificación", onReports)
+        FolderAction("Alumnos", "Lista, datos y cumpleaños", Icons.Default.Groups, Mint, onStudents),
+        FolderAction("Asistencia", "Pase de lista y porcentaje actual", Icons.Default.FactCheck, Lavender, onAttendance),
+        FolderAction("Calificaciones", "Captura y cálculo automático", Icons.Default.Assessment, Blush, onEvaluation),
+        FolderAction("Rúbricas", "Criterios, rubros y porcentajes", Icons.Default.Checklist, Cream, onRubrics),
+        FolderAction("Planeación", "Guía, documentos y apoyo docente", Icons.Default.Assignment, Sky, onGuide),
+        FolderAction("Reportes", "Asistencia y calificación en PDF", Icons.Default.MenuBook, SoftPurple, onReports)
     )
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shape = RoundedCornerShape(26.dp)
+        ) {
+            Column(Modifier.padding(18.dp)) {
                 Text(period.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("${period.type} · ${period.startDate.ifBlank { "Sin fecha de inicio" }} → ${period.endDate.ifBlank { "Sin fecha de término" }}")
+                Text("Tu grupo en un solo lugar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                Text("${period.type} · ${period.startDate.ifBlank { "Sin fecha de inicio" }} → ${period.endDate.ifBlank { "Sin fecha de término" }}", style = MaterialTheme.typography.bodySmall)
             }
         }
-        Spacer(Modifier.height(14.dp))
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
         ) {
             items(folders) { item ->
-                ElevatedCard(onClick = item.action, modifier = Modifier.height(145.dp)) {
-                    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(46.dp))
+                ElevatedCard(onClick = item.action, modifier = Modifier.height(150.dp), shape = RoundedCornerShape(24.dp)) {
+                    Column(
+                        Modifier.fillMaxSize().background(item.tint).padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Icon(item.icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
                         Column {
-                            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(item.subtitle, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
         }
+
+        Text(
+            "Todo tu salón en un solo lugar ♥",
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }

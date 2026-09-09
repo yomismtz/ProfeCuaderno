@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +22,11 @@ import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.CalendarEvent
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.util.PlanningGuideAnalyzer
+import com.profecuaderno.app.util.PlanningSuggestion
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GuideScreen(
@@ -36,6 +42,11 @@ fun GuideScreen(
     val events = remember(refresh, period.id) { db.getEvents(period.id) }
     var eventTypeToCreate by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<CalendarEvent?>(null) }
+    var analyzing by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<PlanningSuggestion>>(emptyList()) }
+    var selectedSuggestions by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var analysisMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -95,6 +106,34 @@ fun GuideScreen(
                             OutlinedButton(onClick = { launcher.launch(arrayOf("application/pdf")) }) {
                                 Text("Cambiar PDF")
                             }
+                        }
+                        Button(
+                            enabled = !analyzing,
+                            onClick = {
+                                val currentUri = uriString ?: return@Button
+                                analyzing = true
+                                analysisMessage = null
+                                scope.launch {
+                                    val found = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            PlanningGuideAnalyzer.analyze(context, Uri.parse(currentUri), period)
+                                        }.getOrElse { emptyList() }
+                                    }
+                                    suggestions = found
+                                    selectedSuggestions = found.indices.toSet()
+                                    analyzing = false
+                                    analysisMessage = if (found.isEmpty()) {
+                                        "No encontré fechas legibles automáticamente. Si el PDF es una imagen escaneada, esta versión no puede extraer su texto."
+                                    } else "Encontré ${found.size} posibles fechas. Revisa cuáles quieres agregar."
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (analyzing) "Analizando…" else "Analizar guía")
+                        }
+                        analysisMessage?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -156,6 +195,71 @@ fun GuideScreen(
                 db.saveEvent(it)
                 eventTypeToCreate = null
                 onChanged()
+            }
+        )
+    }
+
+    if (suggestions.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = {
+                suggestions = emptyList()
+                selectedSuggestions = emptySet()
+            },
+            title = { Text("Fechas detectadas") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
+                    Text("Confirma antes de agregar. La app no guarda ninguna fecha automáticamente.")
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(suggestions.indices.toList()) { index ->
+                            val suggestion = suggestions[index]
+                            OutlinedCard(Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.Top) {
+                                    Checkbox(
+                                        checked = index in selectedSuggestions,
+                                        onCheckedChange = { checked ->
+                                            selectedSuggestions = if (checked) selectedSuggestions + index else selectedSuggestions - index
+                                        }
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text("${suggestion.date} · ${eventTypeLabel(suggestion.type)}", style = MaterialTheme.typography.labelLarge)
+                                        Text(suggestion.title, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = selectedSuggestions.isNotEmpty(),
+                    onClick = {
+                        selectedSuggestions.sorted().forEach { index ->
+                            val suggestion = suggestions[index]
+                            db.saveEvent(
+                                CalendarEvent(
+                                    id = 0,
+                                    periodId = period.id,
+                                    title = suggestion.title,
+                                    date = suggestion.date,
+                                    notes = "Detectado desde la guía/planeación",
+                                    type = suggestion.type
+                                )
+                            )
+                        }
+                        analysisMessage = "Se agregaron ${selectedSuggestions.size} fechas al calendario."
+                        suggestions = emptyList()
+                        selectedSuggestions = emptySet()
+                        onChanged()
+                    }
+                ) { Text("Agregar seleccionadas") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    suggestions = emptyList()
+                    selectedSuggestions = emptySet()
+                }) { Text("Cancelar") }
             }
         )
     }

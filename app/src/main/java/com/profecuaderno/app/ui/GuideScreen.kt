@@ -71,10 +71,10 @@ fun GuideScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
-                        Text("Guía modular / planeación", style = MaterialTheme.typography.titleLarge)
+                        Text("Guía / planeación", style = MaterialTheme.typography.titleLarge)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Aquí puedes conservar el PDF y convertir la planeación en fechas del calendario del grupo.")
+                    Text("Aquí puedes conservar la guía, programa o planeación del curso y convertir sus fechas en actividades del calendario.")
                 }
             }
         }
@@ -243,7 +243,7 @@ fun GuideScreen(
                                     periodId = period.id,
                                     title = suggestion.title,
                                     date = suggestion.date,
-                                    notes = "Detectado desde la guía/planeación",
+                                    notes = "Detectado desde la guía / planeación",
                                     type = suggestion.type
                                 )
                             )

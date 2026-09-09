@@ -46,19 +46,52 @@ fun GuideScreen(
     var suggestions by remember { mutableStateOf<List<PlanningSuggestion>>(emptyList()) }
     var selectedSuggestions by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var analysisMessage by remember { mutableStateOf<String?>(null) }
+    var pickerMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        ExternalActivityGuard.active = false
         if (uri != null) {
-            runCatching {
+            val persisted = runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
+                true
+            }.getOrDefault(false)
+
+            val readable = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.read() }
+                true
+            }.getOrDefault(false)
+
+            if (readable) {
+                prefs.edit().putString(key, uri.toString()).apply()
+                uriString = uri.toString()
+                pickerMessage = if (persisted) {
+                    "Documento seleccionado correctamente."
+                } else {
+                    "Documento seleccionado. Android no permitió conservar el permiso permanente; si deja de abrir, vuelve a seleccionarlo."
+                }
+            } else {
+                pickerMessage = "No pude leer ese archivo. Elige un PDF almacenado en el dispositivo o en un proveedor compatible."
             }
-            prefs.edit().putString(key, uri.toString()).apply()
-            uriString = uri.toString()
         }
+    }
+
+    fun openPicker() {
+        pickerMessage = null
+        ExternalActivityGuard.active = true
+        runCatching {
+            launcher.launch(arrayOf("application/pdf"))
+        }.onFailure {
+            ExternalActivityGuard.active = false
+            pickerMessage = "No se pudo abrir el selector de documentos en este dispositivo."
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { ExternalActivityGuard.active = false }
     }
 
     LazyColumn(
@@ -81,7 +114,7 @@ fun GuideScreen(
 
         item {
             if (uriString == null) {
-                Button(onClick = { launcher.launch(arrayOf("application/pdf")) }) {
+                Button(onClick = { openPicker() }) {
                     Icon(Icons.Default.UploadFile, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Seleccionar PDF")
@@ -98,12 +131,13 @@ fun GuideScreen(
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
                                 runCatching { context.startActivity(intent) }
+                                    .onFailure { pickerMessage = "No encontré una aplicación compatible para abrir este PDF." }
                             }) {
                                 Icon(Icons.Default.FolderOpen, null)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Visualizar")
                             }
-                            OutlinedButton(onClick = { launcher.launch(arrayOf("application/pdf")) }) {
+                            OutlinedButton(onClick = { openPicker() }) {
                                 Text("Cambiar PDF")
                             }
                         }
@@ -137,6 +171,10 @@ fun GuideScreen(
                         }
                     }
                 }
+            }
+            pickerMessage?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 

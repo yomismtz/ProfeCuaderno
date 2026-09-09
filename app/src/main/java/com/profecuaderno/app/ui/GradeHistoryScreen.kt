@@ -1,8 +1,10 @@
 package com.profecuaderno.app.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Restore
@@ -94,7 +96,10 @@ fun GradeHistoryScreen(db: TeacherDbHelper, refresh: Int, onChanged: () -> Unit)
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     HistoryDateFilter.entries.forEach { option ->
                         FilterChip(
                             selected = dateFilter == option,

@@ -150,8 +150,20 @@ fun HomeScreen(
             (start == null || !todayDate.isBefore(start)) && (end == null || !todayDate.isAfter(end))
         }
     }
-    val attendancePending = remember(refresh, groupsToday.map { it.id }) {
-        groupsToday.filter { db.getAttendanceSession(it.id, today) == null }
+    val attendancePending = remember(refresh, groupsToday.map { it.id }, todayEvents) {
+        val attendanceRelevantTypes = setOf(
+            "TEMA_CLASE", "PRACTICA", "LABORATORIO", "EXAMEN",
+            "EVALUACION_PARCIAL", "EVALUACION_MODULAR",
+            "EXPOSICION", "EXPOSICION_MODULAR", "INVESTIGACION_MODULAR"
+        )
+        val groupsWithActivityToday = todayEvents
+            .filter { (_, event) -> event.type in attendanceRelevantTypes }
+            .map { (group, _) -> group.id }
+            .toSet()
+
+        groupsToday.filter { group ->
+            group.id in groupsWithActivityToday && db.getAttendanceSession(group.id, today) == null
+        }
     }
     val pendingEvaluations = remember(refresh) {
         db.getOpenGroups().sumOf { group ->

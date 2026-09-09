@@ -1,5 +1,6 @@
 package com.profecuaderno.app.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,11 +9,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,11 +49,15 @@ fun GuideScreen(
     var selectedSuggestions by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var analysisMessage by remember { mutableStateOf<String?>(null) }
     var pickerMessage by remember { mutableStateOf<String?>(null) }
+    var showFileHelp by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun handlePdf(uri: Uri?) {
         ExternalActivityGuard.active = false
-        if (uri == null) return
+        if (uri == null) {
+            pickerMessage = "No se seleccionó ningún PDF."
+            return
+        }
 
         val persisted = runCatching {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -68,29 +74,32 @@ fun GuideScreen(
             pickerMessage = if (persisted) {
                 "Documento seleccionado correctamente."
             } else {
-                "Documento seleccionado. Android no permitió conservar el permiso permanente; si deja de abrir, vuelve a seleccionarlo."
+                "Documento seleccionado. Si Android revoca el acceso más adelante, solo tendrás que seleccionarlo de nuevo."
             }
         } else {
             pickerMessage = "No pude leer ese archivo. Elige un PDF almacenado en el dispositivo o en un proveedor compatible."
         }
     }
 
-    val openDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), ::handlePdf)
-    val getContentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), ::handlePdf)
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        ExternalActivityGuard.active = false
+        if (result.resultCode == Activity.RESULT_OK) handlePdf(result.data?.data)
+        else pickerMessage = "No se seleccionó ningún PDF."
+    }
 
     fun openPicker() {
         pickerMessage = null
-        ExternalActivityGuard.active = true
-        runCatching {
-            openDocumentLauncher.launch(arrayOf("application/pdf"))
-        }.onFailure {
-            runCatching {
-                getContentLauncher.launch("application/pdf")
-            }.onFailure {
-                ExternalActivityGuard.active = false
-                pickerMessage = "No encontré un selector de archivos compatible. Instala o habilita la app Archivos de Android y vuelve a intentarlo."
-            }
+        val chooser = DocumentPickerCompat.chooserIntent(arrayOf("application/pdf"), "Seleccionar PDF")
+        if (!DocumentPickerCompat.canResolve(context, chooser)) {
+            showFileHelp = true
+            return
         }
+        ExternalActivityGuard.active = true
+        runCatching { pickerLauncher.launch(chooser) }
+            .onFailure {
+                ExternalActivityGuard.active = false
+                showFileHelp = true
+            }
     }
 
     DisposableEffect(Unit) { onDispose { ExternalActivityGuard.active = false } }
@@ -131,8 +140,12 @@ fun GuideScreen(
                                     setDataAndType(uri, "application/pdf")
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
+                                ExternalActivityGuard.active = true
                                 runCatching { context.startActivity(intent) }
-                                    .onFailure { pickerMessage = "No encontré una aplicación compatible para abrir este PDF." }
+                                    .onFailure {
+                                        ExternalActivityGuard.active = false
+                                        pickerMessage = "No encontré una aplicación compatible para abrir este PDF."
+                                    }
                             }) {
                                 Icon(Icons.Default.FolderOpen, null)
                                 Spacer(Modifier.width(6.dp))
@@ -209,6 +222,27 @@ fun GuideScreen(
         }
 
         item { Spacer(Modifier.height(30.dp)) }
+    }
+
+    if (showFileHelp) {
+        AlertDialog(
+            onDismissRequest = { showFileHelp = false },
+            title = { Text("Selector de archivos no disponible") },
+            text = { Text("Android no encontró una aplicación capaz de seleccionar documentos. Habilita o instala un administrador de archivos y vuelve a intentar. También puedes abrir la configuración de esta app desde aquí.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showFileHelp = false
+                    ExternalActivityGuard.active = true
+                    runCatching { context.startActivity(DocumentPickerCompat.appSettingsIntent(context)) }
+                        .onFailure { ExternalActivityGuard.active = false }
+                }) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Abrir configuración")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showFileHelp = false }) { Text("Cerrar") } }
+        )
     }
 
     eventTypeToCreate?.let { selectedType ->

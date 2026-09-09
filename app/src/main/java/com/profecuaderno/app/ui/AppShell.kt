@@ -3,11 +3,13 @@ package com.profecuaderno.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FolderDelete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ private enum class Screen(val title: String) {
     STUDENTS("Alumnos"),
     ATTENDANCE("Asistencia"),
     EVALUATION("Evaluación"),
+    QUICK_GRADE("Captura rápida"),
     RUBRICS("Rubros y rúbricas"),
     GUIDE("Guía / planeación"),
     CALENDAR("Calendario"),
@@ -34,7 +37,8 @@ private enum class Screen(val title: String) {
     HELP("Ayuda"),
     SECURITY("Seguridad y respaldo"),
     TRASH("Papelera"),
-    GRADE_HISTORY("Historial de calificaciones")
+    GRADE_HISTORY("Historial de calificaciones"),
+    SEARCH("Buscar")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,10 +72,25 @@ fun ProfeCuadernoApp(
             Screen.PROGRAM_HOME -> Screen.PROGRAMS
             Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
+            Screen.QUICK_GRADE -> Screen.EVALUATION
             Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP,
-            Screen.TRASH, Screen.GRADE_HISTORY -> Screen.HOME
+            Screen.TRASH, Screen.GRADE_HISTORY, Screen.SEARCH -> Screen.HOME
             Screen.APPEARANCE, Screen.SECURITY -> Screen.PROFILE
             Screen.HOME -> Screen.HOME
+        }
+    }
+
+    fun openSearchResult(result: UniversalSearchResult) {
+        if (result.groupId > 0L) {
+            db.activatePeriod(result.groupId)
+            refreshAll()
+        }
+        screen = when (result.type) {
+            "GROUP" -> Screen.PROGRAM_HOME
+            "STUDENT" -> Screen.STUDENTS
+            "EVENT" -> Screen.CALENDAR
+            "CATEGORY", "ASSESSMENT", "RUBRIC" -> Screen.RUBRICS
+            else -> Screen.HOME
         }
     }
 
@@ -82,39 +101,59 @@ fun ProfeCuadernoApp(
                 title = {
                     Column {
                         Text(screen.title)
-                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY && period != null) {
+                        if (
+                            screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS &&
+                            screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY &&
+                            screen != Screen.SEARCH && period != null
+                        ) {
                             Text(period.name, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 },
                 navigationIcon = {
                     if (screen != Screen.HOME) {
-                        IconButton(onClick = { goBack() }) {
+                        IconButton(onClick = { goBack() }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Regresar")
                         }
                     }
                 },
                 actions = {
+                    if (screen == Screen.EVALUATION) {
+                        IconButton(onClick = { screen = Screen.QUICK_GRADE }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                            Icon(Icons.Default.TableChart, contentDescription = "Captura rápida de calificaciones")
+                        }
+                    }
+                    if (screen != Screen.SEARCH) {
+                        IconButton(onClick = { screen = Screen.SEARCH }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                            Icon(Icons.Default.Search, contentDescription = "Búsqueda universal")
+                        }
+                    }
                     if (screen == Screen.HOME || screen == Screen.PROFILE) {
-                        IconButton(onClick = { screen = Screen.GRADE_HISTORY }) {
+                        IconButton(onClick = { screen = Screen.GRADE_HISTORY }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                             Icon(Icons.Default.History, contentDescription = "Historial de calificaciones")
                         }
-                        IconButton(onClick = { screen = Screen.TRASH }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Papelera")
+                        IconButton(onClick = { screen = Screen.TRASH }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                            Icon(Icons.Default.FolderDelete, contentDescription = "Carpeta Papelera")
                         }
                     }
                     if (screen == Screen.PROFILE) {
-                        IconButton(onClick = { screen = Screen.APPEARANCE }) {
+                        IconButton(onClick = { screen = Screen.APPEARANCE }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                             Icon(Icons.Default.Palette, contentDescription = "Cambiar apariencia")
                         }
                     }
-                    if (screen != Screen.HELP && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY) {
-                        IconButton(onClick = { screen = Screen.HELP }) {
+                    if (
+                        screen != Screen.HELP && screen != Screen.APPEARANCE && screen != Screen.TRASH &&
+                        screen != Screen.GRADE_HISTORY && screen != Screen.SEARCH
+                    ) {
+                        IconButton(onClick = { screen = Screen.HELP }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Ayuda")
                         }
                     }
-                    if (screen != Screen.PROFILE && screen != Screen.APPEARANCE && screen != Screen.TRASH && screen != Screen.GRADE_HISTORY) {
-                        IconButton(onClick = { screen = Screen.PROFILE }) {
+                    if (
+                        screen != Screen.PROFILE && screen != Screen.APPEARANCE && screen != Screen.TRASH &&
+                        screen != Screen.GRADE_HISTORY && screen != Screen.SEARCH
+                    ) {
+                        IconButton(onClick = { screen = Screen.PROFILE }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                             Icon(Icons.Default.Person, contentDescription = "Perfil docente")
                         }
                     }
@@ -160,6 +199,7 @@ fun ProfeCuadernoApp(
                 Screen.STUDENTS -> RequirePeriod(period) { StudentsScreen(db, period!!, tick, refreshAll) }
                 Screen.ATTENDANCE -> RequirePeriod(period) { AttendanceScreen(db, period!!, tick, refreshAll) }
                 Screen.EVALUATION -> RequirePeriod(period) { EvaluationScreen(db, period!!, tick, refreshAll) }
+                Screen.QUICK_GRADE -> RequirePeriod(period) { QuickGradeScreen(db, period!!, tick, refreshAll) }
                 Screen.RUBRICS -> RequirePeriod(period) { RubricsScreen(db, period!!, tick, refreshAll) }
                 Screen.GUIDE -> RequirePeriod(period) { GuideScreen(db, period!!, tick, refreshAll) }
                 Screen.CALENDAR -> CalendarScreen(db, tick, refreshAll)
@@ -185,6 +225,7 @@ fun ProfeCuadernoApp(
                 Screen.SECURITY -> SecurityBackupScreen(db) { refreshAll() }
                 Screen.TRASH -> TrashScreen(db, tick, refreshAll)
                 Screen.GRADE_HISTORY -> GradeHistoryScreen(db, tick, refreshAll)
+                Screen.SEARCH -> UniversalSearchScreen(db, tick, ::openSearchResult)
             }
         }
     }

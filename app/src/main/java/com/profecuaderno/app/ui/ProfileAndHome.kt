@@ -201,7 +201,7 @@ fun ProgramHomeScreen(
         FolderAction("Alumnos", "Datos, correo, teléfono, grupo y cumpleaños", onStudents),
         FolderAction("Asistencia", "Pase de lista y porcentaje sobre días trabajados", onAttendance),
         FolderAction("Evaluación", "Captura calificaciones y calcula el 100%", onEvaluation),
-        FolderAction("Rúbricas", "Criterios, ideas y porcentajes editables", onRubrics),
+        FolderAction("Rubros y rúbricas", "Rubros del 100%, criterios, ideas y porcentajes editables", onRubrics),
         FolderAction("Guía / planeación", "Sube y consulta el PDF del programa", onGuide),
         FolderAction("Reportes", "Concentrado de asistencia y calificación", onReports)
     )

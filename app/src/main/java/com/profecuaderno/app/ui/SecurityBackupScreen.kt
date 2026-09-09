@@ -5,8 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Restore
@@ -32,6 +35,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
+        ExternalActivityGuard.active = false
         if (uri != null) {
             val ok = db.exportBackup(uri)
             message = if (ok) "Copia de seguridad guardada." else "No se pudo crear la copia de seguridad."
@@ -41,6 +45,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
+        ExternalActivityGuard.active = false
         if (uri != null) {
             val ok = db.importBackup(uri)
             message = if (ok) "Copia restaurada correctamente." else "No se pudo restaurar esa copia."
@@ -48,8 +53,12 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose { ExternalActivityGuard.active = false }
+    }
+
     Column(
-        Modifier.fillMaxSize().padding(18.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ElevatedCard(Modifier.fillMaxWidth()) {
@@ -60,23 +69,38 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
         }
 
         ElevatedCard(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Funciona sin internet", style = MaterialTheme.typography.titleMedium)
+                    Text("Tus datos se guardan primero en este dispositivo. No necesitas Google Console para usar esta versión.", style = MaterialTheme.typography.bodySmall)
+                    Text("Más adelante podremos añadir sincronización cuando esté disponible, sin quitar el funcionamiento offline.", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Text("PIN de acceso", style = MaterialTheme.typography.titleMedium)
                 }
                 Text(if (hasPin) "PIN activado." else "Sin PIN configurado.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { showPinDialog = true }) {
+                    Button(onClick = { showPinDialog = true }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(if (hasPin) "Cambiar PIN" else "Crear PIN")
                     }
                     if (hasPin) {
-                        OutlinedButton(onClick = {
-                            AppSecurityManager.clearPin(context)
-                            hasPin = false
-                            biometric = false
-                        }) { Text("Desactivar") }
+                        OutlinedButton(
+                            onClick = {
+                                AppSecurityManager.clearPin(context)
+                                hasPin = false
+                                biometric = false
+                            },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) { Text("Desactivar") }
                     }
                 }
             }
@@ -84,7 +108,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
 
         ElevatedCard(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Fingerprint, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Biometría", style = MaterialTheme.typography.titleMedium)
@@ -117,23 +141,37 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Copia de seguridad", style = MaterialTheme.typography.titleMedium)
-                Text("Guarda una copia manual de alumnos, asistencias, evaluaciones, rúbricas, grupos y calendario. Consérvala en un lugar seguro.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
+                Text("Guarda una copia manual de estudiantes, asistencias, evaluaciones, rúbricas, grupos y calendario. Consérvala en un lugar seguro.")
+                Button(
+                    onClick = {
                         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
-                        backupLauncher.launch("ProfeCuaderno_$stamp.pcbackup")
-                    }) {
-                        Icon(Icons.Default.Backup, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Guardar copia")
-                    }
-                    OutlinedButton(onClick = {
-                        restoreLauncher.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*"))
-                    }) {
-                        Icon(Icons.Default.Restore, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Restaurar")
-                    }
+                        ExternalActivityGuard.active = true
+                        runCatching { backupLauncher.launch("El_Cuaderno_del_Maestro_$stamp.pcbackup") }
+                            .onFailure {
+                                ExternalActivityGuard.active = false
+                                message = "No se pudo abrir el selector para guardar la copia."
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) {
+                    Icon(Icons.Default.Backup, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Guardar copia")
+                }
+                OutlinedButton(
+                    onClick = {
+                        ExternalActivityGuard.active = true
+                        runCatching { restoreLauncher.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
+                            .onFailure {
+                                ExternalActivityGuard.active = false
+                                message = "No se pudo abrir el selector para restaurar la copia."
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) {
+                    Icon(Icons.Default.Restore, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Restaurar copia")
                 }
                 Text("La copia no incluye el PDF de la guía si ese archivo está guardado fuera de la app.", style = MaterialTheme.typography.bodySmall)
             }
@@ -142,6 +180,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
         message?.let {
             AssistChip(onClick = { message = null }, label = { Text(it) })
         }
+        Spacer(Modifier.height(24.dp))
     }
 
     if (showPinDialog) {

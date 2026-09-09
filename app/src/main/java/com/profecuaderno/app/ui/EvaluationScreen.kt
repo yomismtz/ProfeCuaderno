@@ -24,6 +24,7 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
     var expanded by remember { mutableStateOf(false) }
     var rubricStudent by remember { mutableStateOf<Student?>(null) }
     var averageStudent by remember { mutableStateOf<Student?>(null) }
+    var applyDirectToTeam by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (abs(totalWeight - 100.0) > 0.001) {
@@ -81,6 +82,13 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                 return@let
             }
 
+            if (mode == EvaluationMode.DIRECT && students.any { it.teamName.isNotBlank() }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = applyDirectToTeam, onCheckedChange = { applyDirectToTeam = it })
+                    Text("Aplicar calificación directa a todo el equipo")
+                }
+            }
+
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
                     val categoryScore = remember(refresh, student.id, category.id, mode) { db.categoryScore(period.id, student.id, category) }
@@ -106,7 +114,12 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
 
                             when (mode) {
                                 EvaluationMode.DIRECT -> InlineGradeEditor(categoryScore) { value ->
-                                    db.setGrade(period.id, student.id, category.id, value)
+                                    val targets = if (applyDirectToTeam && student.teamName.isNotBlank()) {
+                                        students.filter { it.teamName.equals(student.teamName, ignoreCase = true) }
+                                    } else listOf(student)
+                                    targets.forEach { target ->
+                                        db.setGrade(period.id, target.id, category.id, value)
+                                    }
                                     onChanged()
                                 }
                                 EvaluationMode.RUBRIC -> Button(
@@ -208,6 +221,7 @@ private fun ActivityGradingDialog(
         }
     }
     var values by remember(items, student.id, refresh) { mutableStateOf(initial) }
+    var applyTeam by remember(student.id) { mutableStateOf(false) }
 
     val numericScores = values.values.mapNotNull { it.replace(',', '.').toDoubleOrNull() }
     val average = if (numericScores.isEmpty()) 0.0 else numericScores.average()
@@ -219,6 +233,12 @@ private fun ActivityGradingDialog(
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
                 Text("Escribe 0 si la actividad se perdió o no se entregó. Deja vacío si todavía no se ha evaluado.")
+                if (student.teamName.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = applyTeam, onCheckedChange = { applyTeam = it })
+                        Text("Aplicar estas calificaciones a todo el equipo ${student.teamName}")
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(items, key = { it.id }) { item ->
@@ -241,13 +261,18 @@ private fun ActivityGradingDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                items.forEach { item ->
-                    val text = values[item.id].orEmpty().trim()
-                    val score = text.replace(',', '.').toDoubleOrNull()
-                    if (text.isBlank()) db.setAssessmentScore(student.id, item.id, null)
-                    else if (score != null && score in 0.0..100.0) db.setAssessmentScore(student.id, item.id, score)
+                val targets = if (applyTeam && student.teamName.isNotBlank()) {
+                    db.getStudents(period.id).filter { it.teamName.equals(student.teamName, ignoreCase = true) }
+                } else listOf(student)
+                targets.forEach { target ->
+                    items.forEach { item ->
+                        val text = values[item.id].orEmpty().trim()
+                        val score = text.replace(',', '.').toDoubleOrNull()
+                        if (text.isBlank()) db.setAssessmentScore(target.id, item.id, null)
+                        else if (score != null && score in 0.0..100.0) db.setAssessmentScore(target.id, item.id, score)
+                    }
+                    db.calculateAndStoreAverageGrade(period.id, target.id, category.id)
                 }
-                db.calculateAndStoreAverageGrade(period.id, student.id, category.id)
                 onSaved()
             }) { Text("Guardar") }
         },
@@ -270,6 +295,7 @@ private fun RubricGradingDialog(
         criteria.associate { it.id to db.getRubricMark(student.id, it.id) }.toMutableMap()
     }
     var localMarks by remember(criteria, student.id, refresh) { mutableStateOf(marks) }
+    var applyTeam by remember(student.id) { mutableStateOf(false) }
     val calculated = criteria.sumOf { (localMarks[it.id] ?: 0.0) * it.weight / 100.0 }
 
     AlertDialog(
@@ -278,6 +304,12 @@ private fun RubricGradingDialog(
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
                 Text("Cada criterio se califica de 0 a 100. Los porcentajes internos calculan el resultado del rubro.")
+                if (student.teamName.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = applyTeam, onCheckedChange = { applyTeam = it })
+                        Text("Aplicar esta rúbrica a todo el equipo ${student.teamName}")
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(criteria, key = { it.id }) { criterion ->
@@ -310,10 +342,15 @@ private fun RubricGradingDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                criteria.forEach { criterion ->
-                    db.setRubricMark(student.id, criterion.id, localMarks[criterion.id] ?: 0.0)
+                val targets = if (applyTeam && student.teamName.isNotBlank()) {
+                    db.getStudents(period.id).filter { it.teamName.equals(student.teamName, ignoreCase = true) }
+                } else listOf(student)
+                targets.forEach { target ->
+                    criteria.forEach { criterion ->
+                        db.setRubricMark(target.id, criterion.id, localMarks[criterion.id] ?: 0.0)
+                    }
+                    db.calculateAndStoreRubricGrade(period.id, target.id, category.id)
                 }
-                db.calculateAndStoreRubricGrade(period.id, student.id, category.id)
                 onSaved()
             }) { Text("Guardar") }
         },

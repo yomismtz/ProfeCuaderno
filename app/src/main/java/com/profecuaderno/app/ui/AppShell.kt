@@ -25,7 +25,8 @@ private enum class Screen(val title: String) {
     CALENDAR("Calendario"),
     REPORTS("Reportes"),
     PROFILE("Mi perfil docente"),
-    HELP("Ayuda")
+    HELP("Ayuda"),
+    SECURITY("Seguridad y respaldo")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +49,7 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
             Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
             Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP -> Screen.HOME
+            Screen.SECURITY -> Screen.PROFILE
             Screen.HOME -> Screen.HOME
         }
     }
@@ -128,12 +130,17 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                 Screen.GUIDE -> RequirePeriod(period) { GuideScreen(db, period!!, tick, refreshAll) }
                 Screen.CALENDAR -> CalendarScreen(db, tick, refreshAll)
                 Screen.REPORTS -> RequirePeriod(period) { ReportsScreen(db, period!!, tick) }
-                Screen.PROFILE -> ProfileScreen(teacher) {
-                    db.saveTeacher(it)
-                    refreshAll()
-                    screen = Screen.HOME
-                }
+                Screen.PROFILE -> ProfileScreen(
+                    teacher = teacher,
+                    onSecurity = { screen = Screen.SECURITY },
+                    onSave = {
+                        db.saveTeacher(it)
+                        refreshAll()
+                        screen = Screen.HOME
+                    }
+                )
                 Screen.HELP -> HelpScreen()
+                Screen.SECURITY -> SecurityBackupScreen(db) { refreshAll() }
             }
         }
     }

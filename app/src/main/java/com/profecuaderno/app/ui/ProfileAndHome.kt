@@ -152,6 +152,18 @@ fun HomeScreen(
     val attendancePending = remember(refresh, groupsToday.map { it.id }) {
         groupsToday.filter { db.getAttendanceSession(it.id, today) == null }
     }
+    val pendingEvaluations = remember(refresh) {
+        db.getOpenGroups().sumOf { group ->
+            val categories = db.getCategories(group.id).filter { category ->
+                runCatching { com.profecuaderno.app.data.EvaluationMode.valueOf(category.mode) }
+                    .getOrDefault(com.profecuaderno.app.data.EvaluationMode.DIRECT) != com.profecuaderno.app.data.EvaluationMode.ATTENDANCE
+            }
+            val students = db.getStudents(group.id)
+            students.sumOf { student ->
+                categories.count { category -> !db.hasGradeRecord(student.id, category.id) }
+            }
+        }
+    }
 
     val actions = listOf(
         FolderAction(
@@ -184,7 +196,7 @@ fun HomeScreen(
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (todayEvents.isEmpty() && todayBirthdays.isEmpty() && attendancePending.isEmpty()) {
+                if (todayEvents.isEmpty() && todayBirthdays.isEmpty() && attendancePending.isEmpty() && pendingEvaluations == 0) {
                     Text("No hay actividades ni avisos pendientes para hoy.", style = MaterialTheme.typography.bodySmall)
                 } else {
                     todayEvents.take(4).forEach { (group, event) ->
@@ -195,6 +207,9 @@ fun HomeScreen(
                     }
                     attendancePending.take(4).forEach { group ->
                         Text("• Falta pasar asistencia · ${group.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (pendingEvaluations > 0) {
+                        Text("• $pendingEvaluations evaluaciones pendientes de captura", style = MaterialTheme.typography.bodySmall)
                     }
                     val extra = (todayEvents.size - 4).coerceAtLeast(0) + (todayBirthdays.size - 4).coerceAtLeast(0) + (attendancePending.size - 4).coerceAtLeast(0)
                     if (extra > 0) Text("+ $extra avisos más", style = MaterialTheme.typography.labelSmall)

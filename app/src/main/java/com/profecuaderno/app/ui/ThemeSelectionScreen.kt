@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ThemeSelectionScreen(
     initial: AgendaThemeStyle = AgendaThemeStyle.MINT_LAVENDER,
-    onSelected: (AgendaThemeStyle) -> Unit
+    onSelected: (AgendaThemeStyle) -> Unit,
+    onCancel: (() -> Unit)? = null
 ) {
-    var selected by remember { mutableStateOf(initial) }
+    var selected by remember(initial) { mutableStateOf(initial) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -30,8 +31,8 @@ fun ThemeSelectionScreen(
             Icon(Icons.Default.Palette, null, modifier = Modifier.size(34.dp))
             Spacer(Modifier.width(10.dp))
             Column {
-                Text("Elige tu estilo", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("La agenda cambiará colores, tarjetas, botones y fondo según tu elección.")
+                Text("Hazla tuya", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Elige cómo quieres ver tu agenda. Podrás cambiarlo cuando quieras.")
             }
         }
 
@@ -44,12 +45,21 @@ fun ThemeSelectionScreen(
         }
 
         Spacer(Modifier.weight(1f))
-        Button(
-            onClick = { onSelected(selected) },
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            Text("Usar este estilo", fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (onCancel != null) {
+                OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    shape = RoundedCornerShape(18.dp)
+                ) { Text("Cancelar") }
+            }
+            Button(
+                onClick = { onSelected(selected) },
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Text("Usar este estilo", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -66,7 +76,7 @@ private fun ThemePreviewCard(style: AgendaThemeStyle, selected: Boolean, onClick
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),

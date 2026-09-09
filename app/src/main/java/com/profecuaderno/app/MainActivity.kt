@@ -39,7 +39,11 @@ class MainActivity : FragmentActivity() {
 
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_STOP && AppSecurityManager.isLockEnabled(context)) {
+                        if (
+                            event == Lifecycle.Event.ON_STOP &&
+                            AppSecurityManager.isLockEnabled(context) &&
+                            !ExternalActivityGuard.active
+                        ) {
                             unlocked = false
                         }
                     }

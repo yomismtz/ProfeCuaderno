@@ -15,8 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.TeacherDbHelper
-import com.profecuaderno.app.data.deletePeriodCascade
+import com.profecuaderno.app.data.TrashStore
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 @Composable
 fun PeriodsScreen(
@@ -25,89 +26,74 @@ fun PeriodsScreen(
     onChanged: () -> Unit,
     onOpen: (AcademicPeriod) -> Unit
 ) {
-    val periods = remember(refresh) { db.getPeriods() }
+    val periods = remember(refresh) { TrashStore.visiblePeriods(db) }
     val active = periods.firstOrNull { it.active }
     var showNew by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<AcademicPeriod?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
+    Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
+            Column(Modifier.fillMaxSize().padding(16.dp)) {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text("Toca directamente el recuadro de un grupo para abrirlo. Si eliminas uno, irá a Papelera y podrás recuperarlo.")
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text("Toca directamente el recuadro de un grupo para abrirlo. Desde aquí también puedes eliminar grupos que ya no necesites.")
                 }
-            }
-            Spacer(Modifier.height(10.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (periods.isEmpty()) {
-                    item {
-                        ElevatedCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(18.dp)) {
-                                Text("Aún no tienes grupos.")
-                                Text("Pulsa + para crear el primero.")
+                Spacer(Modifier.height(10.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (periods.isEmpty()) {
+                        item {
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp)) {
+                                    Text("Aún no tienes grupos.")
+                                    Text("Pulsa + para crear el primero.")
+                                }
                             }
                         }
                     }
-                }
-                items(periods, key = { it.id }) { period ->
-                    ElevatedCard(
-                        onClick = { onOpen(period) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
-                                null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(42.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(period.name, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                if (period.archived) Text("Archivado", style = MaterialTheme.typography.labelSmall)
-                                else Text("Toca para abrir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                            IconButton(
-                                onClick = { deleting = period }
-                            ) {
+                    items(periods, key = { it.id }) { period ->
+                        ElevatedCard(onClick = { onOpen(period) }, modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Eliminar ${period.name}",
-                                    tint = MaterialTheme.colorScheme.error
+                                    if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(42.dp)
                                 )
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(period.name, style = MaterialTheme.typography.titleMedium)
+                                    Text("${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}", style = MaterialTheme.typography.bodySmall)
+                                    if (period.archived) Text("Archivado", style = MaterialTheme.typography.labelSmall)
+                                    else Text("Toca para abrir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                                IconButton(onClick = { deleting = period }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar ${period.name}", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
+                    item { Spacer(Modifier.height(90.dp)) }
                 }
-                item { Spacer(Modifier.height(90.dp)) }
             }
-        }
-        FloatingActionButton(
-            onClick = { showNew = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)
-        ) {
-            Icon(Icons.Default.Add, "Nuevo grupo")
+            FloatingActionButton(onClick = { showNew = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
+                Icon(Icons.Default.Add, "Nuevo grupo")
+            }
         }
     }
 
-    if (showNew) NewProgramDialog(
-        periods = periods,
-        active = active,
-        onDismiss = { showNew = false }
-    ) { name, type, start, end, copyFrom ->
+    if (showNew) NewProgramDialog(periods = periods, active = active, onDismiss = { showNew = false }) { name, type, start, end, copyFrom ->
         db.createPeriod(name, type, start, end, copyFrom, true)
         showNew = false
         onChanged()
@@ -117,28 +103,27 @@ fun PeriodsScreen(
     deleting?.let { period ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Eliminar grupo") },
-            text = {
-                Text(
-                    "¿Eliminar '${period.name}'? También se eliminarán sus alumnos, asistencias, calificaciones, rúbricas, planeación y eventos. Esta acción no se puede deshacer."
-                )
-            },
+            title = { Text("Enviar grupo a Papelera") },
+            text = { Text("¿Enviar '${period.name}' a Papelera? Sus estudiantes, asistencias, calificaciones, rúbricas, planeación y eventos se conservarán para poder restaurarlos.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        db.deletePeriodCascade(period.id)
-                        deleting = null
-                        onChanged()
+                TextButton(onClick = {
+                    TrashStore.trashGroup(db, period)
+                    deleting = null
+                    onChanged()
+                    scope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = "${period.name} enviado a Papelera",
+                            actionLabel = "Deshacer",
+                            duration = SnackbarDuration.Long
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            TrashStore.entries(db).firstOrNull { it.type == TrashStore.TYPE_GROUP && it.entityId == period.id }?.let { TrashStore.restore(db, it) }
+                            onChanged()
+                        }
                     }
-                ) {
-                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
-                }
+                }) { Text("Enviar a Papelera", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) {
-                    Text("Cancelar")
-                }
-            }
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
         )
     }
 }
@@ -165,56 +150,23 @@ private fun NewProgramDialog(
         title = { Text("Crear grupo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    name,
-                    { name = it },
-                    label = { Text("Nombre del grupo / materia / curso") },
-                    placeholder = { Text("Ej. Matemáticas 2B / Biología / Taller de diseño") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(name, { name = it }, label = { Text("Nombre del grupo / materia / curso") }, placeholder = { Text("Ej. Matemáticas 2B / Biología / Taller de diseño") }, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
-                    OutlinedTextField(
-                        type,
-                        {},
-                        readOnly = true,
-                        label = { Text("Tipo de periodo") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
+                    OutlinedTextField(type, {}, readOnly = true, label = { Text("Tipo de periodo") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
                     ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                        listOf("Bimestre", "Trimestre", "Cuatrimestre", "Semestre", "Anual", "Curso corto", "Otro").forEach { option ->
-                            DropdownMenuItem(text = { Text(option) }, onClick = { type = option; typeExpanded = false })
-                        }
+                        listOf("Bimestre", "Trimestre", "Cuatrimestre", "Semestre", "Anual", "Curso corto", "Otro").forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { type = option; typeExpanded = false }) }
                     }
                 }
                 DatePickerField(start, { start = it }, "Fecha de inicio")
                 DatePickerField(end, { end = it }, "Fecha de término")
                 if (periods.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(copyStructure, { copyStructure = it })
-                        Text("Usar plantilla de otro grupo")
-                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(copyStructure, { copyStructure = it }); Text("Usar plantilla de otro grupo") }
                     if (copyStructure) {
                         ExposedDropdownMenuBox(expanded = copyExpanded, onExpandedChange = { copyExpanded = !copyExpanded }) {
                             val source = periods.firstOrNull { it.id == copyFromId }
-                            OutlinedTextField(
-                                value = source?.name ?: "Selecciona un grupo",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Copiar rubros, rúbricas y actividades de") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(copyExpanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
-                            )
+                            OutlinedTextField(value = source?.name ?: "Selecciona un grupo", onValueChange = {}, readOnly = true, label = { Text("Copiar rubros, rúbricas y actividades de") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(copyExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
                             ExposedDropdownMenu(expanded = copyExpanded, onDismissRequest = { copyExpanded = false }) {
-                                periods.forEach { sourcePeriod ->
-                                    DropdownMenuItem(
-                                        text = { Text(sourcePeriod.name) },
-                                        onClick = {
-                                            copyFromId = sourcePeriod.id
-                                            copyExpanded = false
-                                        }
-                                    )
-                                }
+                                periods.forEach { sourcePeriod -> DropdownMenuItem(text = { Text(sourcePeriod.name) }, onClick = { copyFromId = sourcePeriod.id; copyExpanded = false }) }
                             }
                         }
                         Text("Solo se copiará la estructura de evaluación. No se copian alumnos, asistencias ni calificaciones.", style = MaterialTheme.typography.bodySmall)
@@ -222,12 +174,7 @@ private fun NewProgramDialog(
                 }
             }
         },
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = { onSave(name, type, start, end, if (copyStructure) copyFromId else null) }
-            ) { Text("Crear grupo") }
-        },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onSave(name, type, start, end, if (copyStructure) copyFromId else null) }) { Text("Crear grupo") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }

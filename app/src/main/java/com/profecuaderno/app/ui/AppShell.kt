@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +24,8 @@ private enum class Screen(val title: String) {
     GUIDE("Guía / planeación"),
     CALENDAR("Calendario"),
     REPORTS("Reportes"),
-    PROFILE("Mi perfil docente")
+    PROFILE("Mi perfil docente"),
+    HELP("Ayuda")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +47,7 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
             Screen.PROGRAM_HOME -> Screen.PROGRAMS
             Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
-            Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE -> Screen.HOME
+            Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP -> Screen.HOME
             Screen.HOME -> Screen.HOME
         }
     }
@@ -70,6 +72,11 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                     }
                 },
                 actions = {
+                    if (screen != Screen.HELP) {
+                        IconButton(onClick = { screen = Screen.HELP }) {
+                            Icon(Icons.Default.HelpOutline, contentDescription = "Ayuda")
+                        }
+                    }
                     if (screen != Screen.PROFILE) {
                         IconButton(onClick = { screen = Screen.PROFILE }) {
                             Icon(Icons.Default.Person, contentDescription = "Perfil docente")
@@ -126,6 +133,7 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                     refreshAll()
                     screen = Screen.HOME
                 }
+                Screen.HELP -> HelpScreen()
             }
         }
     }

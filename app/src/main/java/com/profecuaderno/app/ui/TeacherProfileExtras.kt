@@ -1,6 +1,8 @@
 package com.profecuaderno.app.ui
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,21 +20,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.profecuaderno.app.R
 
 private const val PROFILE_PREFS = "teacher_profile_extras"
 private const val KEY_TEACHING_LEVEL = "teaching_level"
 private const val KEY_AVATAR = "avatar_index"
-private const val AVATAR_WIDTH = 196
-private const val AVATAR_HEIGHT = 132
+private const val AVATAR_WIDTH = 64
+private const val AVATAR_HEIGHT = 43
 
 fun loadTeachingLevel(context: Context): String =
     context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE).getString(KEY_TEACHING_LEVEL, "").orEmpty()
@@ -47,6 +48,16 @@ fun loadTeacherAvatar(context: Context): Int =
 private fun saveTeacherAvatar(context: Context, value: Int) {
     context.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_AVATAR, value).apply()
 }
+
+private fun decodeAvatarSheet(): ImageBitmap {
+    val bytes = Base64.decode(AVATAR_SHEET_BASE64, Base64.DEFAULT)
+    return requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) {
+        "No se pudo cargar la hoja de avatares"
+    }.asImageBitmap()
+}
+
+@Composable
+private fun rememberAvatarSheet(): ImageBitmap = remember { decodeAvatarSheet() }
 
 @Composable
 private fun avatarPainter(sheet: ImageBitmap, number: Int): BitmapPainter {
@@ -92,7 +103,7 @@ fun TeachingLevelSelector(value: String, onValueChange: (String) -> Unit) {
 @Composable
 fun TeacherPhotoPicker() {
     val context = LocalContext.current
-    val sheet = ImageBitmap.imageResource(R.drawable.avatar_sheet)
+    val sheet = rememberAvatarSheet()
     var selected by remember { mutableIntStateOf(loadTeacherAvatar(context)) }
 
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -143,7 +154,7 @@ fun TeacherPhotoPicker() {
 fun TeacherAvatar(modifier: Modifier = Modifier, size: Dp = 72.dp) {
     val context = LocalContext.current
     val selected = loadTeacherAvatar(context)
-    val sheet = ImageBitmap.imageResource(R.drawable.avatar_sheet)
+    val sheet = rememberAvatarSheet()
     Surface(shape = CircleShape, tonalElevation = 2.dp, modifier = modifier.size(size)) {
         if (selected in 1..12) {
             Image(

@@ -58,14 +58,15 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Mi Agenda Docente", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("El Cuaderno del Maestro", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("Planea · Organiza · Asiste · Evalúa")
                     }
                 }
                 HorizontalDivider()
                 Text("Configura tu perfil", style = MaterialTheme.typography.titleMedium)
+                Text("Diseñado para docentes de cualquier nivel educativo.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(name, { name = it }, label = { Text("Nombre completo *") }, modifier = Modifier.fillMaxWidth())
-                DegreeSelector(degree, { degree = it }, "Grado profesional *")
+                DegreeSelector(degree, { degree = it }, "Perfil docente *")
                 DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
                 OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
@@ -74,7 +75,7 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
                     enabled = name.isNotBlank() && degree.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp)
-                ) { Text("Entrar a Mi Agenda Docente") }
+                ) { Text("Entrar a El Cuaderno del Maestro") }
             }
         }
     }
@@ -91,10 +92,10 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
 
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Mi perfil docente", style = MaterialTheme.typography.titleLarge)
-        Text("Estos datos se muestran en tu agenda y pueden editarse cuando lo necesites.")
+        Text("Estos datos se muestran en tu cuaderno y pueden editarse cuando lo necesites.")
         NotificationPermissionCard()
         OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
-        DegreeSelector(degree, { degree = it }, "Grado profesional")
+        DegreeSelector(degree, { degree = it }, "Perfil docente")
         DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
         OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
@@ -115,13 +116,18 @@ fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) ->
 @Composable
 private fun DegreeSelector(value: String, onValueChange: (String) -> Unit, label: String) {
     val options = listOf(
-        "Docente / Profesor(a)",
-        "Licenciatura",
-        "Ingeniería",
+        "Preescolar",
+        "Primaria",
+        "Secundaria",
+        "Telesecundaria",
+        "Bachillerato / Preparatoria",
+        "Escuela técnica / Formación profesional",
+        "Universidad / Licenciatura",
         "Maestría",
         "Doctorado",
-        "Postdoctorado",
-        "Técnico(a)",
+        "Educación especial",
+        "Capacitación / Talleres",
+        "Docente de varios niveles",
         "Otro"
     )
     var expanded by remember { mutableStateOf(false) }
@@ -229,7 +235,7 @@ fun HomeScreen(
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text("¡Hola, Profe!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Mi Agenda Docente", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("El Cuaderno del Maestro", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Text("Planea · Organiza · Asiste · Evalúa", style = MaterialTheme.typography.bodySmall)
                     if (teacher.institution.isNotBlank()) Text(teacher.institution, style = MaterialTheme.typography.labelSmall)
                 }
@@ -300,7 +306,7 @@ fun ProgramHomeScreen(
     val columns = if (landscape) 3 else 2
 
     val folders = listOf(
-        FolderAction("Alumnos", "Lista, datos y cumpleaños", Icons.Default.Groups, Mint, onStudents),
+        FolderAction("Estudiantes", "Lista, datos y cumpleaños", Icons.Default.Groups, Mint, onStudents),
         FolderAction("Asistencia", "Pase de lista y porcentaje actual", Icons.Default.FactCheck, Lavender, onAttendance),
         FolderAction("Calificaciones", "Captura y cálculo automático", Icons.Default.Assessment, Blush, onEvaluation),
         FolderAction("Rúbricas", "Criterios, rubros y porcentajes", Icons.Default.Checklist, Cream, onRubrics),
@@ -345,7 +351,7 @@ fun ProgramHomeScreen(
         }
 
         Text(
-            "Todo tu salón en un solo lugar ♥",
+            "Todo tu grupo en un solo lugar ♥",
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelLarge,

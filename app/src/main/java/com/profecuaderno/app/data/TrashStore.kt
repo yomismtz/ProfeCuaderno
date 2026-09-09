@@ -21,8 +21,10 @@ object TrashStore {
 
     private const val TABLE = "trash_items"
     private const val CONTROL = "trash_control"
+    private const val SETTINGS = "trash_settings"
     private const val INTERNAL_PERIOD = "__PAPELERA_INTERNA__"
     private const val INTERNAL_CATEGORY = "__PAPELERA_INTERNA__"
+    const val RETENTION_DAYS = 30
 
     fun ensure(db: TeacherDbHelper) {
         val sqlDb = db.writableDatabase
@@ -46,9 +48,51 @@ object TrashStore {
             )
             """.trimIndent()
         )
+        sqlDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $SETTINGS(
+                id INTEGER PRIMARY KEY CHECK(id=1),
+                auto_expire INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
         sqlDb.execSQL("INSERT OR IGNORE INTO $CONTROL(id,bypass) VALUES(1,0)")
+        sqlDb.execSQL("INSERT OR IGNORE INTO $SETTINGS(id,auto_expire) VALUES(1,0)")
         ensureInternalContainers(sqlDb)
         installDeleteGuards(sqlDb)
+    }
+
+    fun autoExpirationEnabled(db: TeacherDbHelper): Boolean {
+        ensure(db)
+        db.readableDatabase.query(SETTINGS, arrayOf("auto_expire"), "id=1", null, null, null, null).use { c ->
+            return c.moveToFirst() && c.getInt(0) == 1
+        }
+    }
+
+    fun setAutoExpirationEnabled(db: TeacherDbHelper, enabled: Boolean) {
+        ensure(db)
+        db.writableDatabase.execSQL("UPDATE $SETTINGS SET auto_expire=? WHERE id=1", arrayOf(if (enabled) 1 else 0))
+    }
+
+    fun daysRemaining(entry: TrashEntry, now: Long = System.currentTimeMillis()): Int {
+        val elapsedDays = ((now - entry.deletedAt).coerceAtLeast(0L) / (24L * 60L * 60L * 1000L)).toInt()
+        return (RETENTION_DAYS - elapsedDays).coerceAtLeast(0)
+    }
+
+    fun purgeExpired(db: TeacherDbHelper): Int {
+        ensure(db)
+        if (!autoExpirationEnabled(db)) return 0
+        val cutoff = System.currentTimeMillis() - RETENTION_DAYS * 24L * 60L * 60L * 1000L
+        val expired = entries(db).filter { it.deletedAt <= cutoff }
+        expired.forEach { deletePermanently(db, it) }
+        return expired.size
+    }
+
+    fun emptyAll(db: TeacherDbHelper): Int {
+        ensure(db)
+        val all = entries(db)
+        all.forEach { deletePermanently(db, it) }
+        return all.size
     }
 
     private fun ensureInternalContainers(sqlDb: SQLiteDatabase) {

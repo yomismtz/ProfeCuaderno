@@ -17,8 +17,14 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ProfeCuadernoTheme {
-                val context = LocalContext.current
+            val context = LocalContext.current
+            val prefs = remember { context.getSharedPreferences("agenda_preferences", MODE_PRIVATE) }
+            var selectedTheme by remember {
+                mutableStateOf(AgendaThemeStyle.fromKey(prefs.getString("theme_style", null)))
+            }
+            val activeTheme = selectedTheme ?: AgendaThemeStyle.MINT_LAVENDER
+
+            ProfeCuadernoTheme(style = activeTheme) {
                 val db = remember { TeacherDbHelper(context) }
                 LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
                 var refresh by remember { mutableIntStateOf(0) }
@@ -36,22 +42,33 @@ class MainActivity : FragmentActivity() {
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
 
-                NotebookBackground {
-                    if (!unlocked && AppSecurityManager.isLockEnabled(context)) {
-                        AppLockScreen(onUnlocked = { unlocked = true })
-                    } else if (teacher == null) {
-                        TeacherSetupScreen(
-                            onSave = {
-                                db.saveTeacher(it)
-                                refresh++
+                NotebookBackground(style = activeTheme) {
+                    when {
+                        selectedTheme == null -> ThemeSelectionScreen(
+                            initial = AgendaThemeStyle.MINT_LAVENDER,
+                            onSelected = { style ->
+                                prefs.edit().putString("theme_style", style.key).apply()
+                                selectedTheme = style
                             }
                         )
-                    } else {
-                        ProfeCuadernoApp(
-                            db = db,
-                            onDataChanged = { refresh++ },
-                            globalRefresh = refresh
-                        )
+                        !unlocked && AppSecurityManager.isLockEnabled(context) -> {
+                            AppLockScreen(onUnlocked = { unlocked = true })
+                        }
+                        teacher == null -> {
+                            TeacherSetupScreen(
+                                onSave = {
+                                    db.saveTeacher(it)
+                                    refresh++
+                                }
+                            )
+                        }
+                        else -> {
+                            ProfeCuadernoApp(
+                                db = db,
+                                onDataChanged = { refresh++ },
+                                globalRefresh = refresh
+                            )
+                        }
                     }
                 }
             }

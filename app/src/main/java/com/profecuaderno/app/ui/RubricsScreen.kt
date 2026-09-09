@@ -27,33 +27,32 @@ private data class ActivityPreset(
 
 private val rubricPresets = listOf(
     RubricPreset(
-        "Exposición oral",
-        listOf(
-            "Conocimiento y dominio del tema" to 25.0,
-            "Manejo de la exposición" to 20.0,
-            "Claridad y organización" to 15.0,
-            "Material visual" to 10.0,
-            "Expresión oral" to 10.0,
-            "Uso del tiempo" to 10.0,
-            "Respuesta a preguntas" to 10.0
-        )
-    ),
-    RubricPreset(
-        "Investigación escrita",
+        "Investigación",
         listOf(
             "Título y planteamiento bien definidos" to 10.0,
-            "Marco teórico completo" to 15.0,
-            "Metodología adecuada" to 15.0,
-            "Resultados bien expresados" to 15.0,
-            "Discusión adecuada" to 15.0,
-            "Conclusiones congruentes" to 10.0,
-            "Información completa y coherente" to 10.0,
-            "Ortografía y redacción" to 5.0,
-            "Referencias y formato" to 5.0
+            "Objetivos claros" to 10.0,
+            "Marco teórico / fundamentación" to 15.0,
+            "Metodología" to 15.0,
+            "Resultados" to 15.0,
+            "Discusión" to 15.0,
+            "Conclusiones" to 10.0,
+            "Ortografía, redacción y referencias" to 10.0
         )
     ),
     RubricPreset(
-        "Maqueta / proyecto",
+        "Exposiciones",
+        listOf(
+            "Conocimiento y dominio del tema" to 25.0,
+            "Organización de la exposición" to 15.0,
+            "Claridad al explicar" to 15.0,
+            "Manejo del material visual" to 10.0,
+            "Expresión oral" to 10.0,
+            "Uso del tiempo" to 10.0,
+            "Respuesta a preguntas" to 15.0
+        )
+    ),
+    RubricPreset(
+        "Maquetas",
         listOf(
             "Exactitud del contenido" to 20.0,
             "Diseño y organización" to 15.0,
@@ -61,18 +60,53 @@ private val rubricPresets = listOf(
             "Funcionalidad / pertinencia" to 15.0,
             "Presentación" to 10.0,
             "Explicación del trabajo" to 10.0,
-            "Aplicación e indicaciones" to 10.0
+            "Creatividad y cuidado" to 10.0
         )
     ),
     RubricPreset(
-        "Práctica con rúbrica",
+        "Laboratorios",
         listOf(
             "Preparación previa" to 15.0,
-            "Ejecución del procedimiento" to 30.0,
-            "Calidad del resultado" to 25.0,
+            "Cumplimiento del procedimiento" to 20.0,
+            "Manejo de materiales e instrumental" to 15.0,
+            "Orden, limpieza y seguridad" to 15.0,
+            "Calidad de los resultados" to 20.0,
+            "Registro / reporte de resultados" to 10.0,
+            "Responsabilidad" to 5.0
+        )
+    ),
+    RubricPreset(
+        "Actividades prácticas",
+        listOf(
+            "Preparación previa" to 15.0,
+            "Ejecución de la actividad" to 25.0,
+            "Aplicación de conocimientos" to 20.0,
+            "Calidad del resultado" to 20.0,
             "Organización y manejo del material" to 10.0,
-            "Trabajo colaborativo" to 10.0,
-            "Responsabilidad" to 10.0
+            "Responsabilidad y participación" to 10.0
+        )
+    ),
+    RubricPreset(
+        "Teoría",
+        listOf(
+            "Conocimiento del tema" to 25.0,
+            "Comprensión de conceptos" to 20.0,
+            "Aplicación de conocimientos" to 20.0,
+            "Argumentación / razonamiento" to 15.0,
+            "Uso correcto de términos" to 10.0,
+            "Organización y claridad" to 10.0
+        )
+    ),
+    RubricPreset(
+        "Trabajos",
+        listOf(
+            "Cumplimiento de indicaciones" to 20.0,
+            "Contenido completo" to 25.0,
+            "Organización y estructura" to 15.0,
+            "Calidad de la información" to 15.0,
+            "Presentación" to 10.0,
+            "Ortografía y redacción" to 10.0,
+            "Entrega en tiempo" to 5.0
         )
     )
 )
@@ -98,7 +132,7 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
                 Text("Rubros de la calificación final", style = MaterialTheme.typography.titleMedium)
-                Text("Exámenes, prácticas, laboratorio, tareas, asistencia, investigación y exposiciones pueden tener el porcentaje que tú decidas.")
+                Text("Puedes combinar exámenes, investigación, exposiciones, maquetas, laboratorios, actividades prácticas, teoría, trabajos, tareas y asistencia hasta completar el 100%.")
                 Spacer(Modifier.height(6.dp))
                 val ok = abs(total - 100.0) < 0.001
                 Text(
@@ -219,8 +253,16 @@ private fun CategoryDialog(
     onSave: (EvaluationCategory) -> Unit
 ) {
     val suggestions = listOf(
-        "Exámenes", "Prácticas", "Laboratorio", "Tareas", "Asistencias",
-        "Investigación modular", "Exposiciones", "Exposición de investigación modular"
+        "Exámenes",
+        "Investigación",
+        "Exposiciones",
+        "Maquetas",
+        "Laboratorios",
+        "Actividades prácticas",
+        "Teoría",
+        "Trabajos",
+        "Tareas",
+        "Asistencias"
     )
     var name by remember(initial.id) { mutableStateOf(initial.name) }
     var weightText by remember(initial.id) { mutableStateOf(if (initial.weight == 0.0) "" else initial.weight.toString()) }

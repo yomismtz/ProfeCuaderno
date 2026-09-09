@@ -14,8 +14,8 @@ import com.profecuaderno.app.data.TeacherDbHelper
 
 private enum class Screen(val title: String) {
     HOME("Inicio"),
-    PROGRAMS("Programas"),
-    PROGRAM_HOME("Programa"),
+    PROGRAMS("Grupos"),
+    PROGRAM_HOME("Grupo"),
     STUDENTS("Alumnos"),
     ATTENDANCE("Asistencia"),
     EVALUATION("Evaluación"),
@@ -137,9 +137,9 @@ private fun RequirePeriod(period: AcademicPeriod?, content: @Composable () -> Un
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             ElevatedCard {
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Primero crea un programa", style = MaterialTheme.typography.titleMedium)
+                    Text("Primero crea un grupo", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
-                    Text("Después podrás usar calendario, asistencia, evaluación y demás carpetas.")
+                    Text("Después podrás agregar alumnos, asistencia, evaluación, rúbricas y demás carpetas.")
                 }
             }
         }

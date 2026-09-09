@@ -585,6 +585,19 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
 
     fun rubricWeightTotal(categoryId: Long): Double = getRubricCriteria(categoryId).sumOf { it.weight }
 
+    fun hasGradeRecord(studentId: Long, categoryId: Long): Boolean {
+        readableDatabase.query(
+            "grades",
+            arrayOf("id"),
+            "student_id=? AND category_id=?",
+            arrayOf(studentId.toString(), categoryId.toString()),
+            null,
+            null,
+            null,
+            "1"
+        ).use { cursor -> return cursor.moveToFirst() }
+    }
+
     fun getGrade(studentId: Long, categoryId: Long): Double {
         readableDatabase.query("grades", arrayOf("score"), "student_id=? AND category_id=?", arrayOf(studentId.toString(), categoryId.toString()), null, null, null).use { c ->
             return if (c.moveToFirst()) c.getDouble(0) else 0.0

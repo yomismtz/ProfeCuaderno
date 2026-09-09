@@ -198,7 +198,7 @@ fun ProfeCuadernoApp(
                 }
                 Screen.STUDENTS -> RequirePeriod(period) { StudentsScreen(db, period!!, tick, refreshAll) }
                 Screen.ATTENDANCE -> RequirePeriod(period) { AttendanceScreen(db, period!!, tick, refreshAll) }
-                Screen.EVALUATION -> RequirePeriod(period) { EvaluationScreen(db, period!!, tick, refreshAll) }
+                Screen.EVALUATION -> RequirePeriod(period) { SafeEvaluationScreen(db, period!!, tick, refreshAll) }
                 Screen.QUICK_GRADE -> RequirePeriod(period) { QuickGradeScreen(db, period!!, tick, refreshAll) }
                 Screen.RUBRICS -> RequirePeriod(period) { RubricsScreen(db, period!!, tick, refreshAll) }
                 Screen.GUIDE -> RequirePeriod(period) { GuideScreen(db, period!!, tick, refreshAll) }

@@ -37,7 +37,7 @@ fun PeriodsScreen(
                         Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Text("Cada grupo funciona como una carpeta principal. Dentro estarán alumnos, asistencia, evaluación, rúbricas, guía/planeación y reportes.")
+                    Text("Cada grupo, materia o curso funciona como una carpeta principal. Dentro estarán estudiantes, asistencia, evaluación, rubros y rúbricas, guía/planeación y reportes.")
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -116,8 +116,8 @@ private fun NewProgramDialog(
                 OutlinedTextField(
                     name,
                     { name = it },
-                    label = { Text("Nombre del grupo / materia") },
-                    placeholder = { Text("Ej. Determinantes de la condición oclusal") },
+                    label = { Text("Nombre del grupo / materia / curso") },
+                    placeholder = { Text("Ej. Matemáticas 2B / Biología / Taller de diseño") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
@@ -130,7 +130,7 @@ private fun NewProgramDialog(
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                        listOf("Trimestre", "Cuatrimestre", "Semestre", "Bimestre", "Otro").forEach { option ->
+                        listOf("Bimestre", "Trimestre", "Cuatrimestre", "Semestre", "Anual", "Curso corto", "Otro").forEach { option ->
                             DropdownMenuItem(text = { Text(option) }, onClick = { type = option; typeExpanded = false })
                         }
                     }

@@ -475,12 +475,17 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
     }
 
     fun saveCategory(category: EvaluationCategory): Long {
+        val effectiveMode = if (isAttendanceName(category.name)) {
+            EvaluationMode.ATTENDANCE.name
+        } else {
+            category.mode
+        }
         val values = ContentValues().apply {
             put("period_id", category.periodId)
             put("name", category.name.trim())
             put("weight", category.weight)
             put("position", category.position)
-            put("mode", category.mode)
+            put("mode", effectiveMode)
         }
         return if (category.id == 0L) writableDatabase.insertOrThrow("evaluation_categories", null, values)
         else {
@@ -637,8 +642,20 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
         return total
     }
 
+    fun effectiveEvaluationMode(category: EvaluationCategory): EvaluationMode {
+        if (isAttendanceName(category.name)) return EvaluationMode.ATTENDANCE
+        return runCatching { EvaluationMode.valueOf(category.mode) }.getOrDefault(EvaluationMode.DIRECT)
+    }
+
+    private fun isAttendanceName(name: String): Boolean {
+        val normalized = name.trim().lowercase()
+            .replace("á", "a").replace("é", "e").replace("í", "i")
+            .replace("ó", "o").replace("ú", "u")
+        return normalized == "asistencia" || normalized == "asistencias"
+    }
+
     fun categoryScore(periodId: Long, studentId: Long, category: EvaluationCategory): Double {
-        return when (runCatching { EvaluationMode.valueOf(category.mode) }.getOrDefault(EvaluationMode.DIRECT)) {
+        return when (effectiveEvaluationMode(category)) {
             EvaluationMode.ATTENDANCE -> attendancePercentage(periodId, studentId)
             EvaluationMode.AVERAGE -> {
                 val scores = getAssessmentItems(category.id).mapNotNull { getAssessmentScore(studentId, it.id) }

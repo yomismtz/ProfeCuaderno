@@ -15,12 +15,12 @@ private data class HelpItem(val title: String, val example: String, val icon: Im
 @Composable
 fun HelpScreen() {
     val items = listOf(
-        HelpItem("Crear un grupo", "Grupos → + → nombre, periodo, fecha de inicio y término.", Icons.Default.Folder),
-        HelpItem("Configurar el 100%", "Rubros y rúbricas → agrega Exámenes, Prácticas, Tareas, Asistencia, Investigación, etc. hasta sumar 100%.", Icons.Default.Percent),
+        HelpItem("Crear un grupo o curso", "Grupos → + → nombre de la materia/curso, periodo, fecha de inicio y término.", Icons.Default.Folder),
+        HelpItem("Configurar el 100%", "Rubros y rúbricas → combina Exámenes, Investigación, Exposiciones, Laboratorios, Actividades prácticas, Teoría, Trabajos, Tareas y Asistencia hasta sumar 100%.", Icons.Default.Percent),
         HelpItem("Crear una rúbrica", "En un rubro elige “Rúbrica” y agrega criterios internos. Esos criterios también deben sumar 100%.", Icons.Default.Checklist),
         HelpItem("Registrar tareas o prácticas", "Elige “Promedio de actividades” y crea Tarea 1, Tarea 2… o Práctica 1, Práctica 2…", Icons.Default.EditNote),
         HelpItem("Pasar asistencia", "Asistencia → selecciona fecha → Presente, Falta, Retardo o Justificada.", Icons.Default.FactCheck),
-        HelpItem("Usar la planeación", "Guía / planeación → guarda el PDF y registra exámenes, prácticas, exposiciones, visitas o entregas con fecha.", Icons.Default.CalendarMonth),
+        HelpItem("Usar la planeación", "Guía / planeación → guarda el PDF de tu curso y registra temas, exámenes, prácticas, proyectos, exposiciones, visitas o entregas con fecha.", Icons.Default.CalendarMonth),
         HelpItem("Importar alumnos", "Alumnos → Importar CSV. Puedes cargar nombre, matrícula, correo, teléfono y fecha de nacimiento.", Icons.Default.UploadFile),
         HelpItem("Reportes", "Reportes → toca un alumno para ver su detalle y generar archivos de seguimiento.", Icons.Default.Assessment)
     )

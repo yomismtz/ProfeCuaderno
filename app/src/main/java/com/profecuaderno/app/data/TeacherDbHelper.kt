@@ -448,18 +448,28 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
 
     fun attendancePercentage(periodId: Long, studentId: Long): Double {
         val db = readableDatabase
+        val justifiedCounts = AttendancePolicyStore.justifiedCounts(this, periodId)
         val workedSessions = db.rawQuery("SELECT id FROM attendance_sessions WHERE period_id=? AND worked=1", arrayOf(periodId.toString()))
         var denominator = 0
         var earned = 0.0
         workedSessions.use { sessions ->
             while (sessions.moveToNext()) {
-                denominator++
                 val sessionId = sessions.getLong(0)
+                var excluded = false
+                var factor = 0.0
                 db.query("attendance_records", arrayOf("status"), "session_id=? AND student_id=?", arrayOf(sessionId.toString(), studentId.toString()), null, null, null).use { c ->
                     if (c.moveToFirst()) {
                         val status = runCatching { AttendanceStatus.valueOf(c.getString(0)) }.getOrNull()
-                        earned += status?.factor ?: 0.0
+                        if (status == AttendanceStatus.JUSTIFIED && !justifiedCounts) {
+                            excluded = true
+                        } else {
+                            factor = status?.factor ?: 0.0
+                        }
                     }
+                }
+                if (!excluded) {
+                    denominator++
+                    earned += factor
                 }
             }
         }

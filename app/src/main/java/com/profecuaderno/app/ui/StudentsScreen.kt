@@ -1,5 +1,9 @@
 package com.profecuaderno.app.ui
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,14 +11,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.Student
@@ -33,6 +36,7 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     var deleting by remember { mutableStateOf<Student?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
+    var showFileHelp by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -40,7 +44,7 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
     fun importUri(uri: android.net.Uri?) {
         ExternalActivityGuard.active = false
         if (uri == null) {
-            importMessage = "Importación cancelada."
+            importMessage = "No se seleccionó ningún archivo."
             return
         }
         importing = true
@@ -75,22 +79,26 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
         }
     }
 
-    val csvOpenDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), ::importUri)
-    val csvGetContent = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), ::importUri)
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        ExternalActivityGuard.active = false
+        if (result.resultCode == Activity.RESULT_OK) importUri(result.data?.data)
+        else importMessage = "No se seleccionó ningún archivo."
+    }
 
     fun openCsvPicker() {
         importMessage = null
-        ExternalActivityGuard.active = true
-        runCatching {
-            csvOpenDocument.launch(arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv", "application/octet-stream"))
-        }.onFailure {
-            runCatching {
-                csvGetContent.launch("*/*")
-            }.onFailure {
-                ExternalActivityGuard.active = false
-                importMessage = "No encontré un selector de archivos compatible. Instala o habilita la app Archivos de Android y vuelve a intentarlo."
-            }
+        val mimeTypes = arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv", "application/octet-stream")
+        val chooser = DocumentPickerCompat.chooserIntent(mimeTypes, "Seleccionar archivo CSV")
+        if (!DocumentPickerCompat.canResolve(context, chooser)) {
+            showFileHelp = true
+            return
         }
+        ExternalActivityGuard.active = true
+        runCatching { pickerLauncher.launch(chooser) }
+            .onFailure {
+                ExternalActivityGuard.active = false
+                showFileHelp = true
+            }
     }
 
     DisposableEffect(Unit) { onDispose { ExternalActivityGuard.active = false } }
@@ -140,6 +148,27 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
                 }
             }
         }
+    }
+
+    if (showFileHelp) {
+        AlertDialog(
+            onDismissRequest = { showFileHelp = false },
+            title = { Text("Selector de archivos no disponible") },
+            text = { Text("Android no encontró una aplicación capaz de seleccionar documentos. Habilita o instala un administrador de archivos y vuelve a intentar. También puedes abrir la configuración de esta app desde aquí.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showFileHelp = false
+                    ExternalActivityGuard.active = true
+                    runCatching { context.startActivity(DocumentPickerCompat.appSettingsIntent(context)) }
+                        .onFailure { ExternalActivityGuard.active = false }
+                }) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Abrir configuración")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showFileHelp = false }) { Text("Cerrar") } }
+        )
     }
 
     if (showNew) StudentDialog(

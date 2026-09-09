@@ -61,7 +61,7 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
         }
 
         selected?.let { category ->
-            val mode = runCatching { EvaluationMode.valueOf(category.mode) }.getOrDefault(EvaluationMode.DIRECT)
+            val mode = db.effectiveEvaluationMode(category)
             val criteria = remember(refresh, category.id) { db.getRubricCriteria(category.id) }
             val assessmentItems = remember(refresh, category.id) { db.getAssessmentItems(category.id) }
 
@@ -69,7 +69,7 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                 when (mode) {
                     EvaluationMode.AVERAGE -> if (assessmentItems.isEmpty()) "Primero agrega exámenes, prácticas, tareas o actividades dentro de este rubro." else "Cada alumno tendrá el promedio de las actividades registradas."
                     EvaluationMode.RUBRIC -> if (criteria.isEmpty()) "Primero configura la rúbrica interna." else "Evalúa criterio por criterio; la rúbrica interna suma 100%."
-                    EvaluationMode.ATTENDANCE -> "Este rubro se calcula automáticamente a partir de la asistencia."
+                    EvaluationMode.ATTENDANCE -> "Este rubro está enlazado automáticamente con la carpeta Asistencia. Cada cambio en el pase de lista actualiza este porcentaje y la calificación final."
                     EvaluationMode.DIRECT -> "Captura una calificación directa de 0 a 100."
                 },
                 style = MaterialTheme.typography.bodySmall
@@ -92,6 +92,7 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
                     val categoryScore = remember(refresh, student.id, category.id, mode) { db.categoryScore(period.id, student.id, category) }
+                    val contribution = categoryScore * category.weight / 100.0
                     val finalScore = remember(refresh, student.id) { db.finalPercentage(period.id, student.id) }
 
                     ElevatedCard(Modifier.fillMaxWidth()) {
@@ -99,6 +100,12 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                             Column(Modifier.weight(1f)) {
                                 Text(student.name, style = MaterialTheme.typography.titleSmall)
                                 Text("${category.name}: ${"%.1f".format(categoryScore)}/100", style = MaterialTheme.typography.bodySmall)
+                                if (mode == EvaluationMode.ATTENDANCE) {
+                                    Text(
+                                        "Aporta ${"%.2f".format(contribution)} puntos de ${"%.1f".format(category.weight)} posibles al 100% final",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
                                 Text("Calificación final acumulada: ${"%.1f".format(finalScore)}%", style = MaterialTheme.typography.bodySmall)
 
                                 if (mode == EvaluationMode.AVERAGE && assessmentItems.isNotEmpty()) {

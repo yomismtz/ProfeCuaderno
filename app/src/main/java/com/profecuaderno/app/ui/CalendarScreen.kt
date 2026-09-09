@@ -87,7 +87,7 @@ private fun EventDialog(periodId: Long, onDismiss: () -> Unit, onSave: (Calendar
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("Título") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(date, { date = it }, label = { Text("Fecha") }, placeholder = { Text("AAAA-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                DatePickerField(date, { date = it }, "Fecha")
                 OutlinedTextField(notes, { notes = it }, label = { Text("Notas") }, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("IMPORTANTE", "EXAMEN", "ENTREGA", "CLASE").forEach { option ->

@@ -211,6 +211,8 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
         return out
     }
 
+    fun getOpenGroups(): List<AcademicPeriod> = getPeriods().filter { !it.archived }
+
     fun getActivePeriod(): AcademicPeriod? {
         readableDatabase.query("periods", null, "active=1", null, null, null, "id DESC", "1").use { c ->
             return if (c.moveToFirst()) c.toPeriod() else null
@@ -606,6 +608,43 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, nul
 
     fun deleteEvent(eventId: Long) {
         writableDatabase.delete("events", "id=?", arrayOf(eventId.toString()))
+    }
+
+    fun eventsOn(date: String): List<Pair<AcademicPeriod, CalendarEvent>> {
+        val out = mutableListOf<Pair<AcademicPeriod, CalendarEvent>>()
+        getOpenGroups().forEach { group ->
+            readableDatabase.query("events", null, "period_id=? AND date=?", arrayOf(group.id.toString(), date), null, null, "id").use { c ->
+                while (c.moveToNext()) {
+                    out += group to CalendarEvent(
+                        id = c.getLong(c.getColumnIndexOrThrow("id")),
+                        periodId = c.getLong(c.getColumnIndexOrThrow("period_id")),
+                        title = c.getString(c.getColumnIndexOrThrow("title")),
+                        date = c.getString(c.getColumnIndexOrThrow("date")),
+                        notes = c.getString(c.getColumnIndexOrThrow("notes")),
+                        type = c.getString(c.getColumnIndexOrThrow("type"))
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    fun birthdaysOn(date: LocalDate): List<Pair<AcademicPeriod, Student>> {
+        val out = mutableListOf<Pair<AcademicPeriod, Student>>()
+        getOpenGroups().forEach { group ->
+            val start = runCatching { LocalDate.parse(group.startDate) }.getOrNull()
+            val end = runCatching { LocalDate.parse(group.endDate) }.getOrNull()
+            val inRange = (start == null || !date.isBefore(start)) && (end == null || !date.isAfter(end))
+            if (inRange) {
+                getStudents(group.id).forEach { student ->
+                    val born = runCatching { LocalDate.parse(student.birthDate) }.getOrNull()
+                    if (born != null && born.monthValue == date.monthValue && born.dayOfMonth == date.dayOfMonth) {
+                        out += group to student
+                    }
+                }
+            }
+        }
+        return out
     }
 
     fun birthdaysForPeriod(periodId: Long): List<CalendarEvent> {

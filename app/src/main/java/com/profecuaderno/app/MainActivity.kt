@@ -24,6 +24,11 @@ class MainActivity : FragmentActivity() {
             }
             val activeTheme = selectedTheme ?: AgendaThemeStyle.MINT_LAVENDER
 
+            fun saveTheme(style: AgendaThemeStyle) {
+                prefs.edit().putString("theme_style", style.key).apply()
+                selectedTheme = style
+            }
+
             ProfeCuadernoTheme(style = activeTheme) {
                 val db = remember { TeacherDbHelper(context) }
                 LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
@@ -46,10 +51,7 @@ class MainActivity : FragmentActivity() {
                     when {
                         selectedTheme == null -> ThemeSelectionScreen(
                             initial = AgendaThemeStyle.MINT_LAVENDER,
-                            onSelected = { style ->
-                                prefs.edit().putString("theme_style", style.key).apply()
-                                selectedTheme = style
-                            }
+                            onSelected = { saveTheme(it) }
                         )
                         !unlocked && AppSecurityManager.isLockEnabled(context) -> {
                             AppLockScreen(onUnlocked = { unlocked = true })
@@ -66,7 +68,9 @@ class MainActivity : FragmentActivity() {
                             ProfeCuadernoApp(
                                 db = db,
                                 onDataChanged = { refresh++ },
-                                globalRefresh = refresh
+                                globalRefresh = refresh,
+                                currentTheme = activeTheme,
+                                onThemeChanged = { saveTheme(it) }
                             )
                         }
                     }

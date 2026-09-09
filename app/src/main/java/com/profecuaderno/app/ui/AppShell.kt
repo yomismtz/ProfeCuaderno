@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,13 +26,20 @@ private enum class Screen(val title: String) {
     CALENDAR("Calendario"),
     REPORTS("Reportes"),
     PROFILE("Mi perfil docente"),
+    APPEARANCE("Cambiar apariencia"),
     HELP("Ayuda"),
     SECURITY("Seguridad y respaldo")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefresh: Int) {
+fun ProfeCuadernoApp(
+    db: TeacherDbHelper,
+    onDataChanged: () -> Unit,
+    globalRefresh: Int,
+    currentTheme: AgendaThemeStyle,
+    onThemeChanged: (AgendaThemeStyle) -> Unit
+) {
     var screen by remember { mutableStateOf(Screen.HOME) }
     var localRefresh by remember { mutableIntStateOf(0) }
     val tick = globalRefresh + localRefresh
@@ -49,7 +57,7 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
             Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
             Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP -> Screen.HOME
-            Screen.SECURITY -> Screen.PROFILE
+            Screen.APPEARANCE, Screen.SECURITY -> Screen.PROFILE
             Screen.HOME -> Screen.HOME
         }
     }
@@ -61,7 +69,7 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                 title = {
                     Column {
                         Text(screen.title)
-                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && period != null) {
+                        if (screen != Screen.HOME && screen != Screen.PROFILE && screen != Screen.PROGRAMS && screen != Screen.APPEARANCE && period != null) {
                             Text(period.name, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -74,12 +82,17 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                     }
                 },
                 actions = {
-                    if (screen != Screen.HELP) {
+                    if (screen == Screen.PROFILE) {
+                        IconButton(onClick = { screen = Screen.APPEARANCE }) {
+                            Icon(Icons.Default.Palette, contentDescription = "Cambiar apariencia")
+                        }
+                    }
+                    if (screen != Screen.HELP && screen != Screen.APPEARANCE) {
                         IconButton(onClick = { screen = Screen.HELP }) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Ayuda")
                         }
                     }
-                    if (screen != Screen.PROFILE) {
+                    if (screen != Screen.PROFILE && screen != Screen.APPEARANCE) {
                         IconButton(onClick = { screen = Screen.PROFILE }) {
                             Icon(Icons.Default.Person, contentDescription = "Perfil docente")
                         }
@@ -138,6 +151,14 @@ fun ProfeCuadernoApp(db: TeacherDbHelper, onDataChanged: () -> Unit, globalRefre
                         refreshAll()
                         screen = Screen.HOME
                     }
+                )
+                Screen.APPEARANCE -> ThemeSelectionScreen(
+                    initial = currentTheme,
+                    onSelected = {
+                        onThemeChanged(it)
+                        screen = Screen.PROFILE
+                    },
+                    onCancel = { screen = Screen.PROFILE }
                 )
                 Screen.HELP -> HelpScreen()
                 Screen.SECURITY -> SecurityBackupScreen(db) { refreshAll() }

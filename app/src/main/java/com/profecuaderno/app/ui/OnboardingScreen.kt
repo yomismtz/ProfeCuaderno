@@ -26,38 +26,44 @@ fun OnboardingScreen(
     val steps = listOf(
         IntroStep(
             "1. Crea tu perfil y tus grupos",
-            "Registra tus datos docentes y crea uno o varios grupos por trimestre, semestre, cuatrimestre o el periodo que uses.",
-            "Ejemplo: Grupo 26-O · Estomatología · 17 sep–4 dic.",
+            "Registra tus datos docentes y crea uno o varios grupos, materias, cursos, talleres o módulos con el periodo que utilices.",
+            "Funciona para preescolar, primaria, secundaria, telesecundaria, bachillerato, escuelas técnicas, universidad, maestría y doctorado.",
             Icons.Default.Folder
         ),
         IntroStep(
-            "2. Agrega alumnos y pasa asistencia",
-            "En cada grupo guarda alumnos, matrícula, correo, teléfono y fecha de nacimiento. La asistencia se calcula sobre los días realmente trabajados.",
-            "Ejemplo: Presente, falta, retardo o justificada. Los cumpleaños aparecen solos en el calendario.",
+            "2. Agrega estudiantes y pasa asistencia",
+            "En cada grupo guarda estudiantes, matrícula o identificador, correo, teléfono y fecha de nacimiento. La asistencia se calcula sobre los días realmente trabajados.",
+            "Ejemplo: presente, falta, retardo o justificada. Los cumpleaños aparecen automáticamente en el calendario.",
             Icons.Default.FactCheck
         ),
         IntroStep(
             "3. Organiza la evaluación hasta 100%",
-            "Crea rubros como exámenes, prácticas, laboratorio, tareas, asistencia, investigación y exposiciones. Tú decides el porcentaje de cada uno y el total debe ser 100%.",
-            "Ejemplo: Exámenes 25% + Prácticas 15% + Tareas 10% + Asistencia 10% + Investigación 20% + Exposiciones 20% = 100%.",
+            "Crea rubros como exámenes, actividades, prácticas, proyectos, tareas, asistencia, investigación, exposiciones o los que necesites. Tú decides el porcentaje de cada uno y el total debe ser 100%.",
+            "Ejemplo: Exámenes 30% + Actividades 20% + Proyecto 30% + Asistencia 20% = 100%.",
             Icons.Default.Assessment
         ),
         IntroStep(
-            "4. Usa actividades o rúbricas dentro de cada rubro",
-            "Un rubro puede calcularse por promedio de actividades, por rúbrica interna, por asistencia automática o con una calificación directa.",
-            "Ejemplo: Exámenes → Examen 1, 2, 3 y final. Investigación → marco teórico, metodología, resultados, discusión, conclusión y redacción; esos criterios internos suman 100%.",
+            "4. Elige cómo evaluar cada rubro",
+            "Puedes usar promedio de actividades, promedio de exámenes, rúbrica, reporte de asistencia o una calificación directa.",
+            "Si asignas porcentaje a Reporte de asistencia, la app toma automáticamente el porcentaje real calculado en la carpeta Asistencia y lo aplica a la calificación final.",
             Icons.Default.Checklist
         ),
         IntroStep(
-            "5. Planea desde la guía y el calendario",
+            "5. Personaliza actividades, exámenes y rúbricas",
+            "Pon nombre y porcentaje a cada actividad o examen. En rúbricas puedes usar una plantilla existente o crear tus propios criterios y porcentajes.",
+            "Ejemplo: Examen 1: Oclusión 10% · Examen 2: Diagnóstico 30% · Examen final 60%.",
+            Icons.Default.EditNote
+        ),
+        IntroStep(
+            "6. Planea desde la guía y el calendario",
             "Guarda la guía o planeación del grupo y registra fechas de temas, prácticas, laboratorios, exámenes, evaluaciones, exposiciones, entregas, visitas y actividades externas.",
-            "Ejemplo: 12 oct · Examen parcial. 20 oct · Práctica 4. 4 nov · Exposición modular. La misma fecha aparece en el calendario general.",
+            "La misma fecha puede aparecer en el calendario general para mantener todo organizado.",
             Icons.Default.CalendarMonth
         ),
         IntroStep(
-            "6. Activa recordatorios y revisa reportes",
+            "7. Activa recordatorios y revisa reportes",
             "Cuando quieras, activa las notificaciones para recibir avisos de cumpleaños y actividades programadas. En Reportes podrás revisar asistencia y calificación final.",
-            "Ejemplo: “Hoy es el cumpleaños de Ana” o “Evaluación parcial · Grupo A”.",
+            "Los reportes se adaptan al grupo y al esquema de evaluación que hayas configurado.",
             Icons.Default.NotificationsActive
         )
     )
@@ -79,13 +85,13 @@ fun OnboardingScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Bienvenido a ProfeCuaderno",
+                            "Bienvenido a El Cuaderno del Maestro",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Tu cuaderno docente digital para organizar grupos, alumnos, asistencia, evaluación, planeación, calendario y reportes.",
+                            "Tu cuaderno docente digital para organizar grupos, estudiantes, asistencia, evaluación, planeación, calendario y reportes en cualquier nivel educativo.",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -97,7 +103,7 @@ fun OnboardingScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("¿Para qué sirve?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(6.dp))
-                        Text("La idea es que concentres en una sola app lo que normalmente tienes repartido entre listas, hojas de cálculo, rúbricas, calendarios y documentos.")
+                        Text("La idea es concentrar en una sola app lo que normalmente tienes repartido entre listas, hojas de cálculo, rúbricas, calendarios y documentos, sin obligarte a trabajar con un solo modelo escolar.")
                     }
                 }
             }
@@ -134,7 +140,7 @@ fun OnboardingScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("Importante", style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(4.dp))
-                        Text("Las notificaciones se solicitan después, cuando actives los recordatorios. Puedes usar ProfeCuaderno aunque no les des permiso.")
+                        Text("Las notificaciones se solicitan después, cuando actives los recordatorios. Puedes usar El Cuaderno del Maestro aunque no les des permiso.")
                     }
                 }
             }
@@ -145,7 +151,7 @@ fun OnboardingScreen(
                 onClick = onStart,
                 modifier = Modifier.fillMaxWidth().padding(16.dp)
             ) {
-                Text("Comenzar a usar ProfeCuaderno")
+                Text("Comenzar a usar El Cuaderno del Maestro")
             }
         }
     }

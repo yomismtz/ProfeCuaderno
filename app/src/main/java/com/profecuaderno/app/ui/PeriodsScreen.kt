@@ -6,16 +6,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.profecuaderno.app.data.AcademicPeriod
-import com.profecuaderno.app.data.TeacherDbHelper
-import com.profecuaderno.app.data.TrashStore
+import com.profecuaderno.app.data.*
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -29,7 +29,9 @@ fun PeriodsScreen(
     val periods = remember(refresh) { TrashStore.visiblePeriods(db) }
     val active = periods.firstOrNull { it.active }
     var showNew by remember { mutableStateOf(false) }
+    var showDemoConfirm by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<AcademicPeriod?>(null) }
+    var auditing by remember { mutableStateOf<AcademicPeriod?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -40,14 +42,21 @@ fun PeriodsScreen(
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(8.dp))
                             Text("Mis grupos", style = MaterialTheme.typography.titleMedium)
                         }
-                        Spacer(Modifier.height(6.dp))
-                        Text("Toca directamente el recuadro de un grupo para abrirlo. Si eliminas uno, irá a Papelera y podrás recuperarlo.")
+                        Text("Abre un grupo para trabajar. Antes de cerrarlo puedes revisar un resumen de estudiantes, evaluación y pendientes.")
+                        OutlinedButton(
+                            onClick = { showDemoConfirm = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        ) {
+                            Icon(Icons.Default.Science, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Crear grupo de demostración")
+                        }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -57,29 +66,41 @@ fun PeriodsScreen(
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp)) {
                                     Text("Aún no tienes grupos.")
-                                    Text("Pulsa + para crear el primero.")
+                                    Text("Pulsa + para crear el primero o usa el modo demostración.")
                                 }
                             }
                         }
                     }
                     items(periods, key = { it.id }) { period ->
                         ElevatedCard(onClick = { onOpen(period) }, modifier = Modifier.fillMaxWidth()) {
-                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(42.dp)
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(period.name, style = MaterialTheme.typography.titleMedium)
-                                    Text("${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}", style = MaterialTheme.typography.bodySmall)
-                                    if (period.archived) Text("Archivado", style = MaterialTheme.typography.labelSmall)
-                                    else Text("Toca para abrir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (period.active) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(period.name, style = MaterialTheme.typography.titleMedium)
+                                        Text("${period.type} · ${period.startDate.ifBlank { "Sin inicio" }} → ${period.endDate.ifBlank { "Sin término" }}", style = MaterialTheme.typography.bodySmall)
+                                        Text(if (period.archived) "Periodo cerrado · toca para reabrir" else "Toca para abrir", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    IconButton(onClick = { deleting = period }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar ${period.name}", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
-                                IconButton(onClick = { deleting = period }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar ${period.name}", tint = MaterialTheme.colorScheme.error)
+                                if (!period.archived) {
+                                    Spacer(Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = { auditing = period },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(Icons.Default.FactCheck, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Revisar antes de cerrar")
+                                    }
                                 }
                             }
                         }
@@ -98,6 +119,59 @@ fun PeriodsScreen(
         showNew = false
         onChanged()
         db.getActivePeriod()?.let(onOpen)
+    }
+
+    if (showDemoConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDemoConfirm = false },
+            title = { Text("Crear grupo de demostración") },
+            text = { Text("Se crearán 25 estudiantes ficticios, asistencias, actividades, exámenes, calificaciones y eventos. Todo quedará marcado como DEMO y podrás enviarlo a Papelera después.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = DemoDataGenerator.create(db)
+                    showDemoConfirm = false
+                    onChanged()
+                    db.getPeriods().firstOrNull { it.id == id }?.let(onOpen)
+                }) { Text("Crear DEMO") }
+            },
+            dismissButton = { TextButton(onClick = { showDemoConfirm = false }) { Text("Cancelar") } }
+        )
+    }
+
+    auditing?.let { period ->
+        val summary = remember(refresh, period.id) { PeriodAuditStore.summary(db, period.id) }
+        AlertDialog(
+            onDismissRequest = { auditing = null },
+            title = { Text("Resumen antes de cerrar") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(period.name, style = MaterialTheme.typography.titleSmall)
+                    Text("${summary.studentCount} estudiantes")
+                    Text("${summary.activityCount} actividades · ${summary.examCount} exámenes")
+                    Text("Asistencia: ${"%.1f".format(summary.attendanceWeight)}% de la calificación final")
+                    Text("Total del esquema: ${"%.1f".format(summary.evaluationWeightTotal)}%")
+                    Text("${summary.studentsWithPending} estudiantes con pendientes · ${summary.pendingCells} capturas pendientes")
+                    if (!summary.readyToClose) {
+                        Text("El esquema todavía no está completo al 100%. Corrígelo antes de cerrar el periodo.", color = MaterialTheme.colorScheme.error)
+                    } else if (summary.studentsWithPending > 0) {
+                        Text("El esquema es válido, pero todavía existen evaluaciones pendientes. Puedes cerrar si así lo decides.")
+                    } else {
+                        Text("✓ El periodo está listo para cerrarse.")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = summary.readyToClose,
+                    onClick = {
+                        db.closePeriod(period.id)
+                        auditing = null
+                        onChanged()
+                    }
+                ) { Text(if (summary.studentsWithPending > 0) "Cerrar con pendientes" else "Cerrar periodo") }
+            },
+            dismissButton = { TextButton(onClick = { auditing = null }) { Text("Seguir trabajando") } }
+        )
     }
 
     deleting?.let { period ->
@@ -169,7 +243,7 @@ private fun NewProgramDialog(
                                 periods.forEach { sourcePeriod -> DropdownMenuItem(text = { Text(sourcePeriod.name) }, onClick = { copyFromId = sourcePeriod.id; copyExpanded = false }) }
                             }
                         }
-                        Text("Solo se copiará la estructura de evaluación. No se copian alumnos, asistencias ni calificaciones.", style = MaterialTheme.typography.bodySmall)
+                        Text("Solo se copiará la estructura de evaluación. No se copian estudiantes, asistencias ni calificaciones.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

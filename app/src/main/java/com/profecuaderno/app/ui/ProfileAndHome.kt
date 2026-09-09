@@ -58,7 +58,7 @@ fun TeacherSetupScreen(onSave: (Teacher) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
+fun ProfileScreen(teacher: Teacher, onSecurity: () -> Unit, onSave: (Teacher) -> Unit) {
     var name by remember { mutableStateOf(teacher.name) }
     var birth by remember { mutableStateOf(teacher.birthDate) }
     var degree by remember { mutableStateOf(teacher.degree) }
@@ -74,10 +74,15 @@ fun ProfileScreen(teacher: Teacher, onSave: (Teacher) -> Unit) {
         DatePickerField(birth, { birth = it }, "Fecha de nacimiento")
         OutlinedTextField(institution, { institution = it }, label = { Text("Institución") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(email, { email = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
-        Button(
-            onClick = { onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
-            enabled = name.isNotBlank() && degree.isNotBlank()
-        ) { Text("Guardar cambios") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { onSave(teacher.copy(name = name, birthDate = birth, degree = degree, institution = institution, email = email)) },
+                enabled = name.isNotBlank() && degree.isNotBlank()
+            ) { Text("Guardar cambios") }
+            OutlinedButton(onClick = onSecurity) {
+                Text("Seguridad y respaldo")
+            }
+        }
     }
 }
 

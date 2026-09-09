@@ -20,11 +20,13 @@ object TrashStore {
     const val TYPE_RUBRIC_CRITERION = "RUBRIC_CRITERION"
 
     private const val TABLE = "trash_items"
+    private const val CONTROL = "trash_control"
     private const val INTERNAL_PERIOD = "__PAPELERA_INTERNA__"
     private const val INTERNAL_CATEGORY = "__PAPELERA_INTERNA__"
 
     fun ensure(db: TeacherDbHelper) {
-        db.writableDatabase.execSQL(
+        val sqlDb = db.writableDatabase
+        sqlDb.execSQL(
             """
             CREATE TABLE IF NOT EXISTS $TABLE(
                 entity_type TEXT NOT NULL,
@@ -34,6 +36,132 @@ object TrashStore {
                 deleted_at INTEGER NOT NULL,
                 PRIMARY KEY(entity_type, entity_id)
             )
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $CONTROL(
+                id INTEGER PRIMARY KEY CHECK(id=1),
+                bypass INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+        sqlDb.execSQL("INSERT OR IGNORE INTO $CONTROL(id,bypass) VALUES(1,0)")
+        ensureInternalContainers(sqlDb)
+        installDeleteGuards(sqlDb)
+    }
+
+    private fun ensureInternalContainers(sqlDb: SQLiteDatabase) {
+        var periodId: Long? = null
+        sqlDb.query("periods", arrayOf("id"), "name=?", arrayOf(INTERNAL_PERIOD), null, null, null, "1").use { c ->
+            if (c.moveToFirst()) periodId = c.getLong(0)
+        }
+        if (periodId == null) {
+            val values = ContentValues().apply {
+                put("name", INTERNAL_PERIOD)
+                put("type", "Sistema")
+                put("start_date", "")
+                put("end_date", "")
+                put("active", 0)
+                put("archived", 1)
+            }
+            periodId = sqlDb.insertOrThrow("periods", null, values)
+        }
+        val pid = periodId!!
+        sqlDb.query(
+            "evaluation_categories",
+            arrayOf("id"),
+            "period_id=? AND name=?",
+            arrayOf(pid.toString(), INTERNAL_CATEGORY),
+            null,
+            null,
+            null,
+            "1"
+        ).use { c ->
+            if (!c.moveToFirst()) {
+                val values = ContentValues().apply {
+                    put("period_id", pid)
+                    put("name", INTERNAL_CATEGORY)
+                    put("weight", 0.0)
+                    put("position", 0)
+                    put("mode", EvaluationMode.DIRECT.name)
+                }
+                sqlDb.insertOrThrow("evaluation_categories", null, values)
+            }
+        }
+    }
+
+    private fun installDeleteGuards(sqlDb: SQLiteDatabase) {
+        val nowSql = "CAST(strftime('%s','now') AS INTEGER) * 1000"
+        val trashPeriodSql = "(SELECT id FROM periods WHERE name='$INTERNAL_PERIOD' LIMIT 1)"
+        val trashCategorySql = "(SELECT id FROM evaluation_categories WHERE period_id=$trashPeriodSql AND name='$INTERNAL_CATEGORY' LIMIT 1)"
+        val enabled = "(SELECT bypass FROM $CONTROL WHERE id=1)=0"
+
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_trash_student_delete
+            BEFORE DELETE ON students
+            WHEN $enabled AND NOT EXISTS(SELECT 1 FROM $TABLE WHERE entity_type='$TYPE_STUDENT' AND entity_id=OLD.id)
+            BEGIN
+                INSERT OR REPLACE INTO $TABLE(entity_type,entity_id,label,parent_id,deleted_at)
+                VALUES('$TYPE_STUDENT',OLD.id,OLD.name,OLD.period_id,$nowSql);
+                UPDATE students SET period_id=$trashPeriodSql WHERE id=OLD.id;
+                SELECT RAISE(IGNORE);
+            END
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_trash_event_delete
+            BEFORE DELETE ON events
+            WHEN $enabled AND NOT EXISTS(SELECT 1 FROM $TABLE WHERE entity_type='$TYPE_EVENT' AND entity_id=OLD.id)
+            BEGIN
+                INSERT OR REPLACE INTO $TABLE(entity_type,entity_id,label,parent_id,deleted_at)
+                VALUES('$TYPE_EVENT',OLD.id,OLD.title,OLD.period_id,$nowSql);
+                UPDATE events SET period_id=$trashPeriodSql WHERE id=OLD.id;
+                SELECT RAISE(IGNORE);
+            END
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_trash_category_delete
+            BEFORE DELETE ON evaluation_categories
+            WHEN $enabled
+              AND OLD.name<>'$INTERNAL_CATEGORY'
+              AND NOT EXISTS(SELECT 1 FROM $TABLE WHERE entity_type='$TYPE_CATEGORY' AND entity_id=OLD.id)
+            BEGIN
+                INSERT OR REPLACE INTO $TABLE(entity_type,entity_id,label,parent_id,deleted_at)
+                VALUES('$TYPE_CATEGORY',OLD.id,OLD.name,OLD.period_id,$nowSql);
+                UPDATE evaluation_categories SET period_id=$trashPeriodSql WHERE id=OLD.id;
+                SELECT RAISE(IGNORE);
+            END
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_trash_assessment_delete
+            BEFORE DELETE ON assessment_items
+            WHEN $enabled AND NOT EXISTS(SELECT 1 FROM $TABLE WHERE entity_type='$TYPE_ASSESSMENT_ITEM' AND entity_id=OLD.id)
+            BEGIN
+                INSERT OR REPLACE INTO $TABLE(entity_type,entity_id,label,parent_id,deleted_at)
+                VALUES('$TYPE_ASSESSMENT_ITEM',OLD.id,OLD.name,OLD.category_id,$nowSql);
+                UPDATE assessment_items SET category_id=$trashCategorySql WHERE id=OLD.id;
+                SELECT RAISE(IGNORE);
+            END
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_trash_rubric_delete
+            BEFORE DELETE ON rubric_criteria
+            WHEN $enabled AND NOT EXISTS(SELECT 1 FROM $TABLE WHERE entity_type='$TYPE_RUBRIC_CRITERION' AND entity_id=OLD.id)
+            BEGIN
+                INSERT OR REPLACE INTO $TABLE(entity_type,entity_id,label,parent_id,deleted_at)
+                VALUES('$TYPE_RUBRIC_CRITERION',OLD.id,OLD.name,OLD.category_id,$nowSql);
+                UPDATE rubric_criteria SET category_id=$trashCategorySql WHERE id=OLD.id;
+                SELECT RAISE(IGNORE);
+            END
             """.trimIndent()
         )
     }
@@ -51,35 +179,26 @@ object TrashStore {
     }
 
     private fun trashPeriodId(db: TeacherDbHelper): Long {
-        val sqlDb = db.writableDatabase
-        sqlDb.query("periods", arrayOf("id"), "name=?", arrayOf(INTERNAL_PERIOD), null, null, null, "1").use { c ->
+        ensure(db)
+        db.readableDatabase.query("periods", arrayOf("id"), "name=?", arrayOf(INTERNAL_PERIOD), null, null, null, "1").use { c ->
             if (c.moveToFirst()) return c.getLong(0)
         }
-        val values = ContentValues().apply {
-            put("name", INTERNAL_PERIOD)
-            put("type", "Sistema")
-            put("start_date", "")
-            put("end_date", "")
-            put("active", 0)
-            put("archived", 1)
-        }
-        return sqlDb.insertOrThrow("periods", null, values)
+        error("No se pudo inicializar la Papelera")
     }
 
     private fun trashCategoryId(db: TeacherDbHelper): Long {
         val periodId = trashPeriodId(db)
-        val sqlDb = db.writableDatabase
-        sqlDb.query("evaluation_categories", arrayOf("id"), "period_id=? AND name=?", arrayOf(periodId.toString(), INTERNAL_CATEGORY), null, null, null, "1").use { c ->
-            if (c.moveToFirst()) return c.getLong(0)
-        }
-        val values = ContentValues().apply {
-            put("period_id", periodId)
-            put("name", INTERNAL_CATEGORY)
-            put("weight", 0.0)
-            put("position", 0)
-            put("mode", EvaluationMode.DIRECT.name)
-        }
-        return sqlDb.insertOrThrow("evaluation_categories", null, values)
+        db.readableDatabase.query(
+            "evaluation_categories",
+            arrayOf("id"),
+            "period_id=? AND name=?",
+            arrayOf(periodId.toString(), INTERNAL_CATEGORY),
+            null,
+            null,
+            null,
+            "1"
+        ).use { c -> if (c.moveToFirst()) return c.getLong(0) }
+        error("No se pudo inicializar la categoría interna de Papelera")
     }
 
     fun visiblePeriods(db: TeacherDbHelper): List<AcademicPeriod> {
@@ -129,7 +248,9 @@ object TrashStore {
 
     fun isTrashed(db: TeacherDbHelper, type: String, entityId: Long): Boolean {
         ensure(db)
-        db.readableDatabase.query(TABLE, arrayOf("entity_id"), "entity_type=? AND entity_id=?", arrayOf(type, entityId.toString()), null, null, null, "1").use { return it.moveToFirst() }
+        db.readableDatabase.query(TABLE, arrayOf("entity_id"), "entity_type=? AND entity_id=?", arrayOf(type, entityId.toString()), null, null, null, "1").use {
+            return it.moveToFirst()
+        }
     }
 
     fun entries(db: TeacherDbHelper): List<TrashEntry> {
@@ -148,6 +269,7 @@ object TrashStore {
     }
 
     fun restore(db: TeacherDbHelper, entry: TrashEntry) {
+        ensure(db)
         val sqlDb = db.writableDatabase
         when (entry.type) {
             TYPE_GROUP -> sqlDb.execSQL("UPDATE periods SET archived=0 WHERE id=?", arrayOf(entry.entityId))
@@ -161,16 +283,26 @@ object TrashStore {
     }
 
     fun deletePermanently(db: TeacherDbHelper, entry: TrashEntry) {
+        ensure(db)
         val sqlDb = db.writableDatabase
-        when (entry.type) {
-            TYPE_GROUP -> sqlDb.delete("periods", "id=?", arrayOf(entry.entityId.toString()))
-            TYPE_STUDENT -> sqlDb.delete("students", "id=?", arrayOf(entry.entityId.toString()))
-            TYPE_EVENT -> sqlDb.delete("events", "id=?", arrayOf(entry.entityId.toString()))
-            TYPE_CATEGORY -> sqlDb.delete("evaluation_categories", "id=?", arrayOf(entry.entityId.toString()))
-            TYPE_ASSESSMENT_ITEM -> sqlDb.delete("assessment_items", "id=?", arrayOf(entry.entityId.toString()))
-            TYPE_RUBRIC_CRITERION -> sqlDb.delete("rubric_criteria", "id=?", arrayOf(entry.entityId.toString()))
+        sqlDb.beginTransaction()
+        try {
+            sqlDb.execSQL("UPDATE $CONTROL SET bypass=1 WHERE id=1")
+            when (entry.type) {
+                TYPE_GROUP -> sqlDb.delete("periods", "id=?", arrayOf(entry.entityId.toString()))
+                TYPE_STUDENT -> sqlDb.delete("students", "id=?", arrayOf(entry.entityId.toString()))
+                TYPE_EVENT -> sqlDb.delete("events", "id=?", arrayOf(entry.entityId.toString()))
+                TYPE_CATEGORY -> sqlDb.delete("evaluation_categories", "id=?", arrayOf(entry.entityId.toString()))
+                TYPE_ASSESSMENT_ITEM -> sqlDb.delete("assessment_items", "id=?", arrayOf(entry.entityId.toString()))
+                TYPE_RUBRIC_CRITERION -> sqlDb.delete("rubric_criteria", "id=?", arrayOf(entry.entityId.toString()))
+            }
+            sqlDb.delete(TABLE, "entity_type=? AND entity_id=?", arrayOf(entry.type, entry.entityId.toString()))
+            sqlDb.execSQL("UPDATE $CONTROL SET bypass=0 WHERE id=1")
+            sqlDb.setTransactionSuccessful()
+        } finally {
+            runCatching { sqlDb.execSQL("UPDATE $CONTROL SET bypass=0 WHERE id=1") }
+            sqlDb.endTransaction()
         }
-        sqlDb.delete(TABLE, "entity_type=? AND entity_id=?", arrayOf(entry.type, entry.entityId.toString()))
     }
 
     fun typeLabel(type: String): String = when (type) {

@@ -1,4 +1,4 @@
-# ProfeCuaderno 📓
+# Cuaderno del maestro📓
 
 Aplicación Android para docentes. Funciona como un cuaderno digital configurable para cualquier materia.
 

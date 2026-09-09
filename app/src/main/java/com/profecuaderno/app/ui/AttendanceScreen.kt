@@ -1,6 +1,8 @@
 package com.profecuaderno.app.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -9,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
+import com.profecuaderno.app.data.AttendancePolicyStore
 import com.profecuaderno.app.data.AttendanceStatus
 import com.profecuaderno.app.data.TeacherDbHelper
 import java.time.LocalDate
@@ -21,6 +24,9 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
     val students = remember(refresh, period.id) { db.getStudents(period.id) }
     val session = remember(refresh, period.id, date) { db.getAttendanceSession(period.id, date) }
     var worked by remember(session?.id, session?.worked) { mutableStateOf(session?.worked ?: true) }
+    var justifiedCounts by remember(refresh, period.id) {
+        mutableStateOf(AttendancePolicyStore.justifiedCounts(db, period.id))
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ElevatedCard(Modifier.fillMaxWidth()) {
@@ -33,10 +39,39 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                     Spacer(Modifier.width(8.dp))
                     Text(if (worked) "Día trabajado (sí cuenta para el porcentaje)" else "Clase suspendida / no trabajada")
                 }
-                Button(onClick = {
-                    db.createOrUpdateAttendanceSession(period.id, date, title, worked)
-                    onChanged()
-                }) { Text(if (session == null) "Crear pase de lista" else "Guardar datos de la sesión") }
+                Button(
+                    onClick = {
+                        db.createOrUpdateAttendanceSession(period.id, date, title, worked)
+                        onChanged()
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) { Text(if (session == null) "Crear pase de lista" else "Guardar datos de la sesión") }
+            }
+        }
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Faltas justificadas", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (justifiedCounts) "La justificada cuenta como asistencia" else "La justificada no afecta el porcentaje")
+                        Text(
+                            if (justifiedCounts)
+                                "Se conserva como 'Justificada' en el registro y aporta 100% para esa sesión."
+                            else
+                                "La sesión justificada se excluye del cálculo únicamente para ese estudiante.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = justifiedCounts,
+                        onCheckedChange = { value ->
+                            justifiedCounts = value
+                            AttendancePolicyStore.setJustifiedCounts(db, period.id, value)
+                            onChanged()
+                        }
+                    )
+                }
             }
         }
 
@@ -49,7 +84,7 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                 Text("Esta fecha está marcada como no trabajada y no afecta el porcentaje de asistencia.")
             }
         } else if (students.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Agrega alumnos primero.") }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Agrega estudiantes primero.") }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
@@ -63,7 +98,10 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                                 }
                             }
                             Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 AttendanceStatus.entries.forEach { status ->
                                     FilterChip(
                                         selected = current == status,
@@ -71,7 +109,8 @@ fun AttendanceScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                                             db.setAttendanceStatus(session.id, student.id, status)
                                             onChanged()
                                         },
-                                        label = { Text(shortStatus(status)) }
+                                        label = { Text(shortStatus(status)) },
+                                        modifier = Modifier.heightIn(min = 48.dp)
                                     )
                                 }
                             }

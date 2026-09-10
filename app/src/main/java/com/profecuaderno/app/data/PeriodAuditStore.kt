@@ -39,6 +39,7 @@ object PeriodAuditStore {
             var studentPending = false
             categories.forEach { category ->
                 val weighted = WeightedEvaluationStore.kindFor(db, category)
+                val mode = db.effectiveEvaluationMode(category)
                 when {
                     weighted != null -> {
                         db.getAssessmentItems(category.id).forEach { item ->
@@ -48,7 +49,21 @@ object PeriodAuditStore {
                             }
                         }
                     }
-                    db.effectiveEvaluationMode(category) == EvaluationMode.ATTENDANCE -> Unit
+                    mode == EvaluationMode.RUBRIC -> {
+                        val criteria = db.getRubricCriteria(category.id)
+                        if (criteria.isEmpty()) {
+                            pendingCells++
+                            studentPending = true
+                        } else {
+                            criteria.forEach { criterion ->
+                                if (db.getRubricMarkOrNull(student.id, criterion.id) == null) {
+                                    pendingCells++
+                                    studentPending = true
+                                }
+                            }
+                        }
+                    }
+                    mode == EvaluationMode.ATTENDANCE -> Unit
                     !db.hasGradeRecord(student.id, category.id) -> {
                         pendingCells++
                         studentPending = true

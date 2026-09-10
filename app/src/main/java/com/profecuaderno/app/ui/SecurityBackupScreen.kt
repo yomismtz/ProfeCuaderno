@@ -1,6 +1,6 @@
 package com.profecuaderno.app.ui
 
-import android.net.Uri
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,27 +31,70 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
     var hasPin by remember { mutableStateOf(AppSecurityManager.hasPin(context)) }
     var biometric by remember { mutableStateOf(AppSecurityManager.isBiometricEnabled(context)) }
     var showPinDialog by remember { mutableStateOf(false) }
+    var showFileHelp by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    val backupLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri: Uri? ->
+    val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         ExternalActivityGuard.active = false
-        if (uri != null) {
-            val ok = db.exportBackup(uri)
-            message = if (ok) "Copia de seguridad guardada." else "No se pudo crear la copia de seguridad."
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            message = if (uri == null) {
+                "No se recibió un archivo de destino."
+            } else if (db.exportBackup(uri)) {
+                "Copia de seguridad guardada."
+            } else {
+                "No se pudo crear la copia de seguridad."
+            }
+        } else {
+            message = "Guardado cancelado."
         }
     }
 
-    val restoreLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         ExternalActivityGuard.active = false
-        if (uri != null) {
-            val ok = db.importBackup(uri)
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            val ok = uri != null && db.importBackup(uri)
             message = if (ok) "Copia restaurada correctamente." else "No se pudo restaurar esa copia."
             if (ok) onRestored()
+        } else {
+            message = "Restauración cancelada."
         }
+    }
+
+    fun launchBackup() {
+        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
+        val intent = DocumentPickerCompat.createDocumentIntent(
+            "application/octet-stream",
+            "El_Cuaderno_del_Maestro_$stamp.pcbackup"
+        )
+        if (!DocumentPickerCompat.canResolve(context, intent)) {
+            showFileHelp = true
+            return
+        }
+        ExternalActivityGuard.active = true
+        runCatching { backupLauncher.launch(intent) }
+            .onFailure {
+                ExternalActivityGuard.active = false
+                showFileHelp = true
+            }
+    }
+
+    fun launchRestore() {
+        val intent = DocumentPickerCompat.chooserIntent(
+            arrayOf("application/octet-stream", "application/x-sqlite3", "application/vnd.sqlite3", "*/*"),
+            "Seleccionar copia de seguridad"
+        )
+        if (!DocumentPickerCompat.canResolve(context, intent)) {
+            showFileHelp = true
+            return
+        }
+        ExternalActivityGuard.active = true
+        runCatching { restoreLauncher.launch(intent) }
+            .onFailure {
+                ExternalActivityGuard.active = false
+                showFileHelp = true
+            }
     }
 
     DisposableEffect(Unit) {
@@ -143,15 +187,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
                 Text("Copia de seguridad", style = MaterialTheme.typography.titleMedium)
                 Text("Guarda una copia manual de estudiantes, asistencias, evaluaciones, rúbricas, grupos y calendario. Consérvala en un lugar seguro.")
                 Button(
-                    onClick = {
-                        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
-                        ExternalActivityGuard.active = true
-                        runCatching { backupLauncher.launch("El_Cuaderno_del_Maestro_$stamp.pcbackup") }
-                            .onFailure {
-                                ExternalActivityGuard.active = false
-                                message = "No se pudo abrir el selector para guardar la copia."
-                            }
-                    },
+                    onClick = { launchBackup() },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 ) {
                     Icon(Icons.Default.Backup, contentDescription = null)
@@ -159,14 +195,7 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
                     Text("Guardar copia")
                 }
                 OutlinedButton(
-                    onClick = {
-                        ExternalActivityGuard.active = true
-                        runCatching { restoreLauncher.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
-                            .onFailure {
-                                ExternalActivityGuard.active = false
-                                message = "No se pudo abrir el selector para restaurar la copia."
-                            }
-                    },
+                    onClick = { launchRestore() },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 ) {
                     Icon(Icons.Default.Restore, contentDescription = null)
@@ -181,6 +210,30 @@ fun SecurityBackupScreen(db: TeacherDbHelper, onRestored: () -> Unit) {
             AssistChip(onClick = { message = null }, label = { Text(it) })
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showFileHelp) {
+        AlertDialog(
+            onDismissRequest = { showFileHelp = false },
+            title = { Text("Selector de archivos no disponible") },
+            text = { Text("Android no encontró una aplicación capaz de abrir o guardar documentos. Habilita o instala un administrador de archivos y vuelve a intentarlo.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showFileHelp = false
+                    ExternalActivityGuard.active = true
+                    runCatching { context.startActivity(DocumentPickerCompat.appSettingsIntent(context)) }
+                        .onFailure {
+                            ExternalActivityGuard.active = false
+                            message = "No se pudo abrir la configuración del sistema."
+                        }
+                }) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Abrir configuración")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showFileHelp = false }) { Text("Cerrar") } }
+        )
     }
 
     if (showPinDialog) {

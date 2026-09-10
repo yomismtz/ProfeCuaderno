@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://profe:profe@db:5432/profecuaderno
+      JWT_SECRET: change-this-in-production
+      ACCESS_TOKEN_MINUTES: 10080
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: profecuaderno
+      POSTGRES_USER: profe
+      POSTGRES_PASSWORD: profe
+    volumes:
+      - backend_pg:/var/lib/postgresql/data
+volumes:
+  backend_pg:

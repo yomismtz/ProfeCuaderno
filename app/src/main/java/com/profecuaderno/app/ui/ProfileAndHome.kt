@@ -210,10 +210,10 @@ fun HomeScreen(teacher: Teacher, period: AcademicPeriod?, onPrograms: () -> Unit
 }
 
 @Composable
-fun ProgramHomeScreen(period: AcademicPeriod, onStudents: () -> Unit, onAttendance: () -> Unit, onEvaluation: () -> Unit, onRubrics: () -> Unit, onGuide: () -> Unit, onReports: () -> Unit) {
+fun ProgramHomeScreen(period: AcademicPeriod, onStudents: () -> Unit, onTeams: () -> Unit, onAttendance: () -> Unit, onEvaluation: () -> Unit, onRubrics: () -> Unit, onGuide: () -> Unit, onReports: () -> Unit) {
     val configuration = LocalConfiguration.current; val landscape = configuration.screenWidthDp > configuration.screenHeightDp; val columns = if (landscape) 3 else 2
     val folders = listOf(
-        FolderAction("Estudiantes", "Lista, datos y cumpleaños", Icons.Default.Groups, Mint, onStudents), FolderAction("Asistencia", "Pase de lista y porcentaje actual", Icons.Default.FactCheck, Lavender, onAttendance),
+        FolderAction("Estudiantes", "Lista, datos y cumpleaños", Icons.Default.Groups, Mint, onStudents), FolderAction("Creación de equipos", "Rifa al azar o selección manual", Icons.Default.Groups, Sky, onTeams), FolderAction("Asistencia", "Pase de lista y porcentaje actual", Icons.Default.FactCheck, Lavender, onAttendance),
         FolderAction("Calificaciones", "Captura y cálculo automático", Icons.Default.Assessment, Blush, onEvaluation), FolderAction("Rúbricas", "Criterios, rubros y porcentajes", Icons.Default.Checklist, Cream, onRubrics),
         FolderAction("Planeación", "Guía, documentos y apoyo docente", Icons.Default.Assignment, Sky, onGuide), FolderAction("Reportes", "Asistencia y calificación en PDF", Icons.Default.MenuBook, SoftPurple, onReports)
     )

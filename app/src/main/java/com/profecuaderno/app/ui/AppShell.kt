@@ -26,6 +26,7 @@ private enum class Screen(val title: String) {
     PROGRAMS("Grupos"),
     PROGRAM_HOME("Grupo"),
     STUDENTS("Alumnos"),
+    TEAMS("Creación de equipos"),
     ATTENDANCE("Asistencia"),
     EVALUATION("Evaluación"),
     QUICK_GRADE("Captura rápida"),
@@ -72,7 +73,7 @@ fun ProfeCuadernoApp(
     fun goBack() {
         screen = when (screen) {
             Screen.PROGRAM_HOME -> Screen.PROGRAMS
-            Screen.STUDENTS, Screen.ATTENDANCE, Screen.EVALUATION,
+            Screen.STUDENTS, Screen.TEAMS, Screen.ATTENDANCE, Screen.EVALUATION,
             Screen.RUBRICS, Screen.GUIDE, Screen.REPORTS -> Screen.PROGRAM_HOME
             Screen.QUICK_GRADE -> Screen.EVALUATION
             Screen.PROGRAMS, Screen.CALENDAR, Screen.PROFILE, Screen.HELP,
@@ -191,6 +192,7 @@ fun ProfeCuadernoApp(
                     ProgramHomeScreen(
                         period = period!!,
                         onStudents = { screen = Screen.STUDENTS },
+                        onTeams = { screen = Screen.TEAMS },
                         onAttendance = { screen = Screen.ATTENDANCE },
                         onEvaluation = { screen = Screen.EVALUATION },
                         onRubrics = { screen = Screen.RUBRICS },
@@ -199,6 +201,7 @@ fun ProfeCuadernoApp(
                     )
                 }
                 Screen.STUDENTS -> RequirePeriod(period) { StudentsScreen(db, period!!, tick, refreshAll) }
+                Screen.TEAMS -> RequirePeriod(period) { TeamFormationScreen(db, period!!, tick, refreshAll) }
                 Screen.ATTENDANCE -> RequirePeriod(period) { AttendanceScreen(db, period!!, tick, refreshAll) }
                 Screen.EVALUATION -> RequirePeriod(period) { SafeEvaluationScreen(db, period!!, tick, refreshAll) }
                 Screen.QUICK_GRADE -> RequirePeriod(period) { QuickGradeScreen(db, period!!, tick, refreshAll) }

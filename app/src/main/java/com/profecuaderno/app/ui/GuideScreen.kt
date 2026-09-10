@@ -76,11 +76,11 @@ fun GuideScreen(
                 "Documento seleccionado. Si Android revoca el acceso más adelante, solo tendrás que seleccionarlo de nuevo."
             }
         } else {
-            pickerMessage = "No pude leer ese archivo. Elige un PDF, CSV, Excel, Word o TXT almacenado en el dispositivo o en un proveedor compatible."
+            pickerMessage = "No pude leer ese archivo. Elige un PDF, CSV, Excel, Word, TXT o imagen almacenado en el dispositivo o en un proveedor compatible."
         }
     }
 
-    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         ExternalActivityGuard.active = false
         handleDocument(uri)
     }
@@ -88,7 +88,7 @@ fun GuideScreen(
     fun openPicker() {
         pickerMessage = null
         ExternalActivityGuard.active = true
-        runCatching { pickerLauncher.launch("*/*") }
+        runCatching { pickerLauncher.launch(DocumentImportPolicy.mimeTypes) }
             .onFailure {
                 ExternalActivityGuard.active = false
                 pickerMessage = "No pude abrir el selector de documentos de Android."
@@ -110,7 +110,7 @@ fun GuideScreen(
                         Text("Guía / planeación", style = MaterialTheme.typography.titleLarge)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Aquí puedes conservar la guía, programa o planeación del curso en PDF, CSV, Excel, Word o TXT y usarla como apoyo para organizar tus actividades.")
+                    Text("Aquí puedes conservar la guía, programa o planeación del curso en PDF, CSV, Excel, Word, TXT o imagen y usarla como apoyo para organizar tus actividades.")
                 }
             }
         }
@@ -160,7 +160,7 @@ fun GuideScreen(
                                     selectedSuggestions = found.indices.toSet()
                                     analyzing = false
                                     analysisMessage = if (found.isEmpty()) {
-                                        "No encontré fechas legibles automáticamente. Si el PDF es una imagen escaneada, esta versión no puede extraer su texto."
+                                        "No encontré fechas legibles. La app ya intentó extracción de texto y OCR cuando el formato lo permite."
                                     } else "Encontré ${found.size} posibles fechas. Revisa cuáles quieres agregar."
                                 }
                             }

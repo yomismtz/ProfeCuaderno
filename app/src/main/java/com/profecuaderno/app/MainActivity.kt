@@ -5,9 +5,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.profecuaderno.app.security.AppSecurityManager
 import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.notifications.ReminderScheduler

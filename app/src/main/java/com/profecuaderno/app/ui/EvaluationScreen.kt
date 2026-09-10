@@ -234,14 +234,14 @@ private fun RubricGradingDialog(
     onSaved: () -> Unit
 ) {
     val criteria = remember(refresh, category.id) { db.getRubricCriteria(category.id) }
-    val initialMarks = remember(criteria, student.id, refresh) {
-        criteria.associate<Long, Double?> { it.id to db.getRubricMarkOrNull(student.id, it.id) }
+    val initialMarks: Map<Long, Double?> = remember(criteria, student.id, refresh) {
+        criteria.associate { criterion -> criterion.id to db.getRubricMarkOrNull(student.id, criterion.id) }
     }
-    var marks by remember(criteria, student.id, refresh) { mutableStateOf(initialMarks) }
+    var marks: Map<Long, Double?> by remember(criteria, student.id, refresh) { mutableStateOf(initialMarks) }
     var applyTeam by remember(student.id) { mutableStateOf(false) }
-    val registered = criteria.mapNotNull { criterion -> marks[criterion.id]?.let { criterion to it } }
-    val registeredWeight = registered.sumOf { it.first.weight }
-    val calculated = if (registeredWeight <= 0.0) 0.0 else registered.sumOf { it.second * it.first.weight } / registeredWeight
+    val registered = criteria.mapNotNull { criterion -> marks[criterion.id]?.let { score -> criterion to score } }
+    val registeredWeight = registered.sumOf { entry -> entry.first.weight }
+    val calculated = if (registeredWeight <= 0.0) 0.0 else registered.sumOf { entry -> entry.second * entry.first.weight } / registeredWeight
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -258,7 +258,9 @@ private fun RubricGradingDialog(
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(criteria, key = { it.id }) { criterion ->
-                        var text by remember(criterion.id, marks[criterion.id]) { mutableStateOf(marks[criterion.id]?.let { "%.1f".format(it) } ?: "") }
+                        var text by remember(criterion.id, marks[criterion.id]) {
+                            mutableStateOf(marks[criterion.id]?.let { score -> "%.1f".format(score) } ?: "")
+                        }
                         OutlinedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(10.dp)) {
                                 Text("${criterion.name} · ${"%.1f".format(criterion.weight)}%")
@@ -269,8 +271,8 @@ private fun RubricGradingDialog(
                                         val trimmed = raw.trim()
                                         val parsed = trimmed.replace(',', '.').toDoubleOrNull()
                                         when {
-                                            trimmed.isBlank() -> marks = marks.toMutableMap().also { it[criterion.id] = null }
-                                            parsed != null && parsed in 0.0..100.0 -> marks = marks.toMutableMap().also { it[criterion.id] = parsed }
+                                            trimmed.isBlank() -> marks = marks.toMutableMap().also { map -> map[criterion.id] = null }
+                                            parsed != null && parsed in 0.0..100.0 -> marks = marks.toMutableMap().also { map -> map[criterion.id] = parsed }
                                         }
                                     },
                                     label = { Text("Calificación 0-100") }, singleLine = true, modifier = Modifier.fillMaxWidth()
@@ -288,7 +290,7 @@ private fun RubricGradingDialog(
             TextButton(onClick = {
                 val targets = if (applyTeam && student.teamName.isNotBlank()) db.getStudents(period.id).filter { it.teamName.equals(student.teamName, ignoreCase = true) } else listOf(student)
                 targets.forEach { target ->
-                    criteria.forEach { db.setRubricMark(target.id, it.id, marks[it.id]) }
+                    criteria.forEach { criterion -> db.setRubricMark(target.id, criterion.id, marks[criterion.id]) }
                     db.calculateAndStoreRubricGrade(period.id, target.id, category.id)
                 }
                 onSaved()

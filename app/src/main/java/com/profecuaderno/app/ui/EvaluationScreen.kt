@@ -82,13 +82,8 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
                     val categoryScore: Double? = remember(refresh, student.id, category.id, weightedKind, mode) {
-                        when {
-                            weightedKind != null -> WeightedEvaluationStore.weightedScoreOrNull(db, student.id, category.id)
-                            mode == EvaluationMode.DIRECT || mode == EvaluationMode.RUBRIC -> {
-                                if (db.hasGradeRecord(student.id, category.id)) db.categoryScore(period.id, student.id, category) else null
-                            }
-                            else -> db.categoryScore(period.id, student.id, category)
-                        }
+                        if (weightedKind != null) WeightedEvaluationStore.weightedScoreOrNull(db, student.id, category.id)
+                        else db.categoryScoreOrNull(period.id, student.id, category)
                     }
                     val contribution = (categoryScore ?: 0.0) * category.weight / 100.0
                     val finalScore = remember(refresh, student.id) { db.finalPercentage(period.id, student.id) }
@@ -109,7 +104,7 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
                                 if (mode == EvaluationMode.ATTENDANCE && categoryScore != null) {
                                     Text("Aporta ${"%.2f".format(contribution)} de ${"%.1f".format(category.weight)} puntos posibles", style = MaterialTheme.typography.labelSmall)
                                 }
-                                Text("Calificación final acumulada: ${"%.1f".format(finalScore)}%", style = MaterialTheme.typography.bodySmall)
+                                Text("Calificación actual: ${"%.1f".format(finalScore)}%", style = MaterialTheme.typography.bodySmall)
                             }
 
                             when {
@@ -239,17 +234,21 @@ private fun RubricGradingDialog(
     onSaved: () -> Unit
 ) {
     val criteria = remember(refresh, category.id) { db.getRubricCriteria(category.id) }
-    val initialMarks = remember(criteria, student.id, refresh) { criteria.associate { it.id to db.getRubricMark(student.id, it.id) }.toMutableMap() }
+    val initialMarks = remember(criteria, student.id, refresh) {
+        criteria.associate<Long, Double?> { it.id to db.getRubricMarkOrNull(student.id, it.id) }
+    }
     var marks by remember(criteria, student.id, refresh) { mutableStateOf(initialMarks) }
     var applyTeam by remember(student.id) { mutableStateOf(false) }
-    val calculated = criteria.sumOf { (marks[it.id] ?: 0.0) * it.weight / 100.0 }
+    val registered = criteria.mapNotNull { criterion -> marks[criterion.id]?.let { criterion to it } }
+    val registeredWeight = registered.sumOf { it.first.weight }
+    val calculated = if (registeredWeight <= 0.0) 0.0 else registered.sumOf { it.second * it.first.weight } / registeredWeight
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${category.name} · ${student.name}") },
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 620.dp)) {
-                Text("Cada criterio se califica de 0 a 100.")
+                Text("Escribe 0 si corresponde. Déjalo vacío si todavía no se evalúa.")
                 if (student.teamName.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = applyTeam, onCheckedChange = { applyTeam = it })
@@ -259,7 +258,7 @@ private fun RubricGradingDialog(
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(criteria, key = { it.id }) { criterion ->
-                        var text by remember(criterion.id, marks[criterion.id]) { mutableStateOf(if ((marks[criterion.id] ?: 0.0) == 0.0) "" else "%.1f".format(marks[criterion.id])) }
+                        var text by remember(criterion.id, marks[criterion.id]) { mutableStateOf(marks[criterion.id]?.let { "%.1f".format(it) } ?: "") }
                         OutlinedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(10.dp)) {
                                 Text("${criterion.name} · ${"%.1f".format(criterion.weight)}%")
@@ -267,7 +266,12 @@ private fun RubricGradingDialog(
                                     value = text,
                                     onValueChange = { raw ->
                                         text = raw
-                                        raw.replace(',', '.').toDoubleOrNull()?.takeIf { it in 0.0..100.0 }?.let { parsed -> marks = marks.toMutableMap().also { it[criterion.id] = parsed } }
+                                        val trimmed = raw.trim()
+                                        val parsed = trimmed.replace(',', '.').toDoubleOrNull()
+                                        when {
+                                            trimmed.isBlank() -> marks = marks.toMutableMap().also { it[criterion.id] = null }
+                                            parsed != null && parsed in 0.0..100.0 -> marks = marks.toMutableMap().also { it[criterion.id] = parsed }
+                                        }
                                     },
                                     label = { Text("Calificación 0-100") }, singleLine = true, modifier = Modifier.fillMaxWidth()
                                 )
@@ -276,14 +280,15 @@ private fun RubricGradingDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Resultado: ${"%.1f".format(calculated)}/100", style = MaterialTheme.typography.titleMedium)
+                Text("Resultado actual: ${"%.1f".format(calculated)}/100", style = MaterialTheme.typography.titleMedium)
+                Text("Criterios evaluados: ${registered.size}/${criteria.size}", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val targets = if (applyTeam && student.teamName.isNotBlank()) db.getStudents(period.id).filter { it.teamName.equals(student.teamName, ignoreCase = true) } else listOf(student)
                 targets.forEach { target ->
-                    criteria.forEach { db.setRubricMark(target.id, it.id, marks[it.id] ?: 0.0) }
+                    criteria.forEach { db.setRubricMark(target.id, it.id, marks[it.id]) }
                     db.calculateAndStoreRubricGrade(period.id, target.id, category.id)
                 }
                 onSaved()

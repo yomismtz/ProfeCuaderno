@@ -38,12 +38,23 @@ object GradeHistoryStore {
             """.trimIndent()
         )
         runCatching { sqlDb.execSQL("ALTER TABLE $TABLE ADD COLUMN action TEXT NOT NULL DEFAULT '$ACTION_MODIFIED'") }
+
         sqlDb.execSQL("DROP TRIGGER IF EXISTS trg_grade_history_insert")
+        sqlDb.execSQL("DROP TRIGGER IF EXISTS trg_grade_history_before_insert_new")
+        sqlDb.execSQL("DROP TRIGGER IF EXISTS trg_grade_history_before_insert_replace")
         sqlDb.execSQL("DROP TRIGGER IF EXISTS trg_grade_history_update")
+
+        // setGrade currently uses INSERT OR REPLACE. Logging BEFORE INSERT lets us
+        // inspect the previous row before SQLite replaces it, so a real edit is
+        // recorded as MODIFIED instead of incorrectly appearing as CREATED.
         sqlDb.execSQL(
             """
-            CREATE TRIGGER trg_grade_history_insert
-            AFTER INSERT ON grades
+            CREATE TRIGGER trg_grade_history_before_insert_new
+            BEFORE INSERT ON grades
+            WHEN NOT EXISTS(
+                SELECT 1 FROM grades
+                WHERE student_id=NEW.student_id AND category_id=NEW.category_id
+            )
             BEGIN
                 INSERT INTO $TABLE(period_id, student_id, category_id, student_name, category_name, old_score, new_score, changed_at, action)
                 VALUES(
@@ -56,6 +67,31 @@ object GradeHistoryStore {
                     NEW.score,
                     CAST(strftime('%s','now') AS INTEGER) * 1000,
                     '$ACTION_CREATED'
+                );
+            END
+            """.trimIndent()
+        )
+        sqlDb.execSQL(
+            """
+            CREATE TRIGGER trg_grade_history_before_insert_replace
+            BEFORE INSERT ON grades
+            WHEN EXISTS(
+                SELECT 1 FROM grades
+                WHERE student_id=NEW.student_id AND category_id=NEW.category_id
+                  AND ABS(score - NEW.score) > 0.0001
+            )
+            BEGIN
+                INSERT INTO $TABLE(period_id, student_id, category_id, student_name, category_name, old_score, new_score, changed_at, action)
+                VALUES(
+                    NEW.period_id,
+                    NEW.student_id,
+                    NEW.category_id,
+                    COALESCE((SELECT name FROM students WHERE id=NEW.student_id), ''),
+                    COALESCE((SELECT name FROM evaluation_categories WHERE id=NEW.category_id), ''),
+                    (SELECT score FROM grades WHERE student_id=NEW.student_id AND category_id=NEW.category_id LIMIT 1),
+                    NEW.score,
+                    CAST(strftime('%s','now') AS INTEGER) * 1000,
+                    '$ACTION_MODIFIED'
                 );
             END
             """.trimIndent()

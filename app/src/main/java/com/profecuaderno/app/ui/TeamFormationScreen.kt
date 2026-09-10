@@ -1,10 +1,10 @@
 package com.profecuaderno.app.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -12,7 +12,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.profecuaderno.app.data.AcademicPeriod
-import com.profecuaderno.app.data.Student
 import com.profecuaderno.app.data.TeamFormation
 import com.profecuaderno.app.data.TeamFormationStore
 import com.profecuaderno.app.data.TeamGroup
@@ -55,7 +54,10 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
 
     fun buildRandom() {
         val active = students.filterNot { it.id in excludedIds }.shuffled()
-        if (active.isEmpty()) { preview = emptyList(); return }
+        if (active.isEmpty()) {
+            preview = emptyList()
+            return
+        }
         val count = teamCount(active.size)
         val buckets = List(count) { mutableListOf<Long>() }
         active.forEachIndexed { index, student -> buckets[index % count].add(student.id) }
@@ -64,7 +66,10 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
 
     fun buildManual() {
         val active = students.filterNot { it.id in excludedIds }
-        if (active.isEmpty()) { preview = emptyList(); return }
+        if (active.isEmpty()) {
+            preview = emptyList()
+            return
+        }
         val count = teamCount(active.size)
         val buckets = List(count) { mutableListOf<Long>() }
         active.forEach { student ->
@@ -109,7 +114,7 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Tipo de actividad") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -184,7 +189,10 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
                     Spacer(Modifier.height(6.dp))
                     students.filterNot { it.id in excludedIds }.forEach { student ->
                         Text(student.name, fontWeight = FontWeight.SemiBold)
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             repeat(count) { teamIndex ->
                                 FilterChip(
                                     selected = manualAssignments[student.id] == teamIndex,
@@ -208,7 +216,11 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
                     enabled = activeCount > 0 && (amountText.toIntOrNull() ?: 0) > 0,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (method == TeamMethod.RANDOM && preview.isNotEmpty()) "🎲 Volver a sortear" else if (method == TeamMethod.RANDOM) "🎲 Sortear equipos" else "Crear vista previa")
+                    Text(
+                        if (method == TeamMethod.RANDOM && preview.isNotEmpty()) "🎲 Volver a sortear"
+                        else if (method == TeamMethod.RANDOM) "🎲 Sortear equipos"
+                        else "Crear vista previa"
+                    )
                 }
             }
 
@@ -218,13 +230,17 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(team.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            team.studentIds.forEach { id -> Text("• ${students.firstOrNull { it.id == id }?.name ?: "Alumno"}") }
+                            team.studentIds.forEach { id ->
+                                Text("• ${students.firstOrNull { it.id == id }?.name ?: "Alumno"}")
+                            }
                             if (team.studentIds.isEmpty()) Text("Sin alumnos", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
                 item {
-                    Button(onClick = ::saveFormation, modifier = Modifier.fillMaxWidth()) { Text("Guardar formación de equipos") }
+                    Button(onClick = ::saveFormation, modifier = Modifier.fillMaxWidth()) {
+                        Text("Guardar formación de equipos")
+                    }
                 }
             }
         }
@@ -247,12 +263,19 @@ fun TeamFormationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: In
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(formation.createdAt)), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(formation.createdAt)),
+                            style = MaterialTheme.typography.bodySmall
+                        )
                         formation.teams.forEach { team ->
                             val names = team.studentIds.mapNotNull { id -> students.firstOrNull { it.id == id }?.name }
                             Text("${team.name}: ${names.joinToString(", ").ifBlank { "Sin alumnos" }}", style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton(onClick = { TeamFormationStore.delete(context, formation.id); historyTick++; onChanged() }) { Text("Eliminar") }
+                        TextButton(onClick = {
+                            TeamFormationStore.delete(context, formation.id)
+                            historyTick++
+                            onChanged()
+                        }) { Text("Eliminar") }
                     }
                 }
             }

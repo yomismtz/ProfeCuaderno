@@ -1,0 +1,47 @@
+name: Align planning import and OCR
+
+on:
+  push:
+    paths:
+      - '.github/workflows/align-planning-import.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Port OCR analyzer and durable document picker
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/yomismtz/La-carpeta-del-docente-offline/main/app/src/main/java/com/profecuaderno/app/util/PlanningGuideAnalyzer.kt \
+            -o app/src/main/java/com/profecuaderno/app/util/PlanningGuideAnalyzer.kt
+          python3 - <<'PY'
+          from pathlib import Path
+
+          policy = Path('app/src/main/java/com/profecuaderno/app/ui/DocumentImportPolicy.kt')
+          s = policy.read_text()
+          s = s.replace('        "text/plain"\n', '        "text/plain",\n        "image/jpeg",\n        "image/png",\n        "image/webp",\n        "image/heic",\n        "image/heif"\n')
+          s = s.replace('setOf("pdf", "csv", "xls", "xlsx", "doc", "docx", "txt")', 'setOf("pdf", "csv", "xls", "xlsx", "doc", "docx", "txt", "jpg", "jpeg", "png", "webp", "heic", "heif")')
+          policy.write_text(s)
+
+          guide = Path('app/src/main/java/com/profecuaderno/app/ui/GuideScreen.kt')
+          s = guide.read_text()
+          s = s.replace('val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->\n        ExternalActivityGuard.active = false\n        handleDocument(uri)\n    }', 'val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->\n        ExternalActivityGuard.active = false\n        handleDocument(uri)\n    }')
+          s = s.replace('runCatching { pickerLauncher.launch("*/*") }', 'runCatching { pickerLauncher.launch(DocumentImportPolicy.mimeTypes) }')
+          s = s.replace('PDF, CSV, Excel, Word o TXT', 'PDF, CSV, Excel, Word, TXT o imagen')
+          s = s.replace('PDF, CSV, Excel, Word o TXT y usarla', 'PDF, CSV, Excel, Word, TXT o imagen y usarla')
+          s = s.replace('"No encontré fechas legibles automáticamente. Si el PDF es una imagen escaneada, esta versión no puede extraer su texto."', '"No encontré fechas legibles. La app ya intentó extracción de texto y OCR cuando el formato lo permite."')
+          guide.write_text(s)
+          PY
+      - name: Commit aligned implementation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/com/profecuaderno/app/util/PlanningGuideAnalyzer.kt app/src/main/java/com/profecuaderno/app/ui/DocumentImportPolicy.kt app/src/main/java/com/profecuaderno/app/ui/GuideScreen.kt
+          git diff --cached --quiet || git commit -m "Support OCR planning dates and persistent document access"
+          git push

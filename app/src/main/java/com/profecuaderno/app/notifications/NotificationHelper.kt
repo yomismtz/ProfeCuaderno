@@ -40,8 +40,9 @@ object NotificationHelper {
     }
 
     fun canNotify(context: Context): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        val runtimePermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return runtimePermissionGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
     fun postBirthday(context: Context, studentName: String, groupName: String) {
@@ -55,7 +56,11 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        NotificationManagerCompat.from(context).notify(("birthday-$studentName-$groupName").hashCode(), notification)
+        try {
+            NotificationManagerCompat.from(context).notify(("birthday-$studentName-$groupName").hashCode(), notification)
+        } catch (_: SecurityException) {
+            // El permiso puede cambiar entre la comprobación y la publicación.
+        }
     }
 
     fun postAgenda(context: Context, title: String, groupName: String, typeLabel: String, notes: String) {
@@ -73,7 +78,11 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        NotificationManagerCompat.from(context).notify(("agenda-$groupName-$title").hashCode(), notification)
+        try {
+            NotificationManagerCompat.from(context).notify(("agenda-$groupName-$title").hashCode(), notification)
+        } catch (_: SecurityException) {
+            // El permiso puede cambiar entre la comprobación y la publicación.
+        }
     }
 
     private fun openAppIntent(context: Context): PendingIntent {

@@ -204,10 +204,19 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
             } ?: error("No se pudo leer la copia de seguridad.")
 
             val testDb = SQLiteDatabase.openDatabase(temp.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            testDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher'", null).use { cursor ->
-                if (!cursor.moveToFirst()) error("El archivo no es una copia válida de ProfeCuaderno.")
+            try {
+                testDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher'", null).use { cursor ->
+                    if (!cursor.moveToFirst()) error("El archivo no es una copia válida de ProfeCuaderno.")
+                }
+                val requiredTables = listOf("periods", "students", "attendance_sessions", "evaluation_categories", "grades")
+                requiredTables.forEach { table ->
+                    testDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name=?", arrayOf(table)).use { cursor ->
+                        if (!cursor.moveToFirst()) error("La copia está incompleta: falta $table.")
+                    }
+                }
+            } finally {
+                testDb.close()
             }
-            testDb.close()
 
             close()
             val dbFile = appContext.getDatabasePath(DB_NAME)
@@ -312,6 +321,21 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
     }
 
     private fun copyEvaluationStructure(db: SQLiteDatabase, fromPeriodId: Long, toPeriodId: Long) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS weighted_evaluation_methods(
+                category_id INTEGER PRIMARY KEY,
+                kind TEXT NOT NULL,
+                FOREIGN KEY(category_id) REFERENCES evaluation_categories(id) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS assessment_item_weights(
+                item_id INTEGER PRIMARY KEY,
+                weight REAL NOT NULL DEFAULT 0,
+                FOREIGN KEY(item_id) REFERENCES assessment_items(id) ON DELETE CASCADE
+            )
+        """.trimIndent())
+
         val oldCategories = mutableListOf<EvaluationCategory>()
         db.query("evaluation_categories", null, "period_id=?", arrayOf(fromPeriodId.toString()), null, null, "position,id").use { c ->
             while (c.moveToNext()) oldCategories += c.toCategory()
@@ -325,14 +349,33 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
                 put("mode", old.mode)
             }
             val newCategoryId = db.insertOrThrow("evaluation_categories", null, catValues)
+
+            db.query("weighted_evaluation_methods", arrayOf("kind"), "category_id=?", arrayOf(old.id.toString()), null, null, null).use { method ->
+                if (method.moveToFirst()) {
+                    db.insertOrThrow("weighted_evaluation_methods", null, ContentValues().apply {
+                        put("category_id", newCategoryId)
+                        put("kind", method.getString(0))
+                    })
+                }
+            }
+
             db.query("assessment_items", null, "category_id=?", arrayOf(old.id.toString()), null, null, "position,id").use { ac ->
                 while (ac.moveToNext()) {
+                    val oldItemId = ac.getLong(ac.getColumnIndexOrThrow("id"))
                     val values = ContentValues().apply {
                         put("category_id", newCategoryId)
                         put("name", ac.getString(ac.getColumnIndexOrThrow("name")))
                         put("position", ac.getInt(ac.getColumnIndexOrThrow("position")))
                     }
-                    db.insertOrThrow("assessment_items", null, values)
+                    val newItemId = db.insertOrThrow("assessment_items", null, values)
+                    db.query("assessment_item_weights", arrayOf("weight"), "item_id=?", arrayOf(oldItemId.toString()), null, null, null).use { weightCursor ->
+                        if (weightCursor.moveToFirst()) {
+                            db.insertOrThrow("assessment_item_weights", null, ContentValues().apply {
+                                put("item_id", newItemId)
+                                put("weight", weightCursor.getDouble(0))
+                            })
+                        }
+                    }
                 }
             }
             db.query("rubric_criteria", null, "category_id=?", arrayOf(old.id.toString()), null, null, "position,id").use { rc ->
@@ -446,31 +489,35 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
         return counts
     }
 
+    fun hasAttendanceRecords(periodId: Long, studentId: Long): Boolean {
+        val sql = """
+            SELECT 1
+            FROM attendance_records ar
+            JOIN attendance_sessions s ON s.id=ar.session_id
+            WHERE s.period_id=? AND s.worked=1 AND ar.student_id=?
+            LIMIT 1
+        """.trimIndent()
+        readableDatabase.rawQuery(sql, arrayOf(periodId.toString(), studentId.toString())).use { cursor ->
+            return cursor.moveToFirst()
+        }
+    }
+
     fun attendancePercentage(periodId: Long, studentId: Long): Double {
-        val db = readableDatabase
         val justifiedCounts = AttendancePolicyStore.justifiedCounts(this, periodId)
-        val workedSessions = db.rawQuery("SELECT id FROM attendance_sessions WHERE period_id=? AND worked=1", arrayOf(periodId.toString()))
+        val sql = """
+            SELECT ar.status
+            FROM attendance_records ar
+            JOIN attendance_sessions s ON s.id=ar.session_id
+            WHERE s.period_id=? AND s.worked=1 AND ar.student_id=?
+        """.trimIndent()
         var denominator = 0
         var earned = 0.0
-        workedSessions.use { sessions ->
-            while (sessions.moveToNext()) {
-                val sessionId = sessions.getLong(0)
-                var excluded = false
-                var factor = 0.0
-                db.query("attendance_records", arrayOf("status"), "session_id=? AND student_id=?", arrayOf(sessionId.toString(), studentId.toString()), null, null, null).use { c ->
-                    if (c.moveToFirst()) {
-                        val status = runCatching { AttendanceStatus.valueOf(c.getString(0)) }.getOrNull()
-                        if (status == AttendanceStatus.JUSTIFIED && !justifiedCounts) {
-                            excluded = true
-                        } else {
-                            factor = status?.factor ?: 0.0
-                        }
-                    }
-                }
-                if (!excluded) {
-                    denominator++
-                    earned += factor
-                }
+        readableDatabase.rawQuery(sql, arrayOf(periodId.toString(), studentId.toString())).use { cursor ->
+            while (cursor.moveToNext()) {
+                val status = runCatching { AttendanceStatus.valueOf(cursor.getString(0)) }.getOrNull() ?: continue
+                if (status == AttendanceStatus.JUSTIFIED && !justifiedCounts) continue
+                denominator++
+                earned += status.factor
             }
         }
         return if (denominator == 0) 0.0 else earned / denominator * 100.0
@@ -561,7 +608,15 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
 
     fun calculateAndStoreAverageGrade(periodId: Long, studentId: Long, categoryId: Long): Double {
         val scores = getAssessmentItems(categoryId).mapNotNull { getAssessmentScore(studentId, it.id) }
-        val average = if (scores.isEmpty()) 0.0 else scores.average()
+        if (scores.isEmpty()) {
+            writableDatabase.delete(
+                "grades",
+                "period_id=? AND student_id=? AND category_id=?",
+                arrayOf(periodId.toString(), studentId.toString(), categoryId.toString())
+            )
+            return 0.0
+        }
+        val average = scores.average()
         setGrade(periodId, studentId, categoryId, average)
         return average
     }
@@ -626,16 +681,29 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
             put("category_id", categoryId)
             put("score", score.coerceIn(0.0, 100.0))
         }
-        writableDatabase.insertWithOnConflict("grades", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        val updated = writableDatabase.update(
+            "grades",
+            values,
+            "student_id=? AND category_id=?",
+            arrayOf(studentId.toString(), categoryId.toString())
+        )
+        if (updated == 0) writableDatabase.insertOrThrow("grades", null, values)
     }
 
-    fun getRubricMark(studentId: Long, criterionId: Long): Double {
+    fun getRubricMarkOrNull(studentId: Long, criterionId: Long): Double? {
         readableDatabase.query("rubric_marks", arrayOf("score"), "student_id=? AND criterion_id=?", arrayOf(studentId.toString(), criterionId.toString()), null, null, null).use { c ->
-            return if (c.moveToFirst()) c.getDouble(0) else 0.0
+            return if (c.moveToFirst()) c.getDouble(0) else null
         }
     }
 
-    fun setRubricMark(studentId: Long, criterionId: Long, score: Double) {
+    fun getRubricMark(studentId: Long, criterionId: Long): Double =
+        getRubricMarkOrNull(studentId, criterionId) ?: 0.0
+
+    fun setRubricMark(studentId: Long, criterionId: Long, score: Double?) {
+        if (score == null) {
+            writableDatabase.delete("rubric_marks", "student_id=? AND criterion_id=?", arrayOf(studentId.toString(), criterionId.toString()))
+            return
+        }
         val values = ContentValues().apply {
             put("student_id", studentId)
             put("criterion_id", criterionId)
@@ -647,7 +715,20 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
     fun calculateAndStoreRubricGrade(periodId: Long, studentId: Long, categoryId: Long): Double {
         val criteria = getRubricCriteria(categoryId)
         if (criteria.isEmpty()) return getGrade(studentId, categoryId)
-        val total = criteria.sumOf { criterion -> getRubricMark(studentId, criterion.id) * criterion.weight / 100.0 }
+        val marks = criteria.mapNotNull { criterion ->
+            getRubricMarkOrNull(studentId, criterion.id)?.let { score -> criterion to score }
+        }
+        if (marks.isEmpty()) {
+            writableDatabase.delete(
+                "grades",
+                "period_id=? AND student_id=? AND category_id=?",
+                arrayOf(periodId.toString(), studentId.toString(), categoryId.toString())
+            )
+            return 0.0
+        }
+        val registeredWeight = marks.sumOf { it.first.weight }
+        val total = if (registeredWeight <= 0.0) 0.0
+        else marks.sumOf { it.second * it.first.weight } / registeredWeight
         setGrade(periodId, studentId, categoryId, total)
         return total
     }
@@ -664,21 +745,30 @@ class TeacherDbHelper(context: Context) : SQLiteOpenHelper(context.applicationCo
         return normalized == "asistencia" || normalized == "asistencias"
     }
 
-    fun categoryScore(periodId: Long, studentId: Long, category: EvaluationCategory): Double {
+    fun categoryScoreOrNull(periodId: Long, studentId: Long, category: EvaluationCategory): Double? {
         return when (effectiveEvaluationMode(category)) {
-            EvaluationMode.ATTENDANCE -> attendancePercentage(periodId, studentId)
+            EvaluationMode.ATTENDANCE -> if (hasAttendanceRecords(periodId, studentId)) attendancePercentage(periodId, studentId) else null
             EvaluationMode.AVERAGE -> {
                 val scores = getAssessmentItems(category.id).mapNotNull { getAssessmentScore(studentId, it.id) }
-                if (scores.isEmpty()) 0.0 else scores.average()
+                scores.takeIf { it.isNotEmpty() }?.average()
             }
-            else -> getGrade(studentId, category.id)
+            else -> if (hasGradeRecord(studentId, category.id)) getGrade(studentId, category.id) else null
         }
     }
 
+    fun categoryScore(periodId: Long, studentId: Long, category: EvaluationCategory): Double =
+        categoryScoreOrNull(periodId, studentId, category) ?: 0.0
+
     fun finalPercentage(periodId: Long, studentId: Long): Double {
-        return getCategories(periodId).sumOf { category ->
-            categoryScore(periodId, studentId, category) * category.weight / 100.0
-        }.coerceIn(0.0, 100.0)
+        var weightedPoints = 0.0
+        var evaluatedWeight = 0.0
+        getCategories(periodId).forEach { category ->
+            val score = categoryScoreOrNull(periodId, studentId, category) ?: return@forEach
+            if (category.weight <= 0.0) return@forEach
+            weightedPoints += score * category.weight
+            evaluatedWeight += category.weight
+        }
+        return if (evaluatedWeight <= 0.0) 0.0 else (weightedPoints / evaluatedWeight).coerceIn(0.0, 100.0)
     }
 
     fun getEvents(periodId: Long): List<CalendarEvent> {

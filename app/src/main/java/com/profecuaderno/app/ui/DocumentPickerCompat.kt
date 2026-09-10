@@ -19,6 +19,14 @@ object DocumentPickerCompat {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
+    fun createDocumentIntent(mimeType: String, suggestedName: String): Intent =
+        Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_TITLE, suggestedName)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+
     fun chooserIntent(mimeTypes: Array<String>, title: String): Intent {
         val primary = openDocumentIntent(mimeTypes)
         val fallback = getContentIntent(mimeTypes)

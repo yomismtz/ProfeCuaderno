@@ -23,6 +23,7 @@ Aplicación Android para docentes. Funciona como un cuaderno digital configurabl
 - Calendario/agenda de fechas importantes.
 - Cumpleaños automáticos a partir de la fecha de nacimiento de los alumnos.
 - Reporte grupal y exportación CSV.
+- Importación de planeaciones con detección de fechas en PDF, Word, texto e imágenes; los PDF escaneados e imágenes usan OCR local.
 - Diseño inspirado en cuaderno, con iconos y paleta morado/menta/turquesa.
 - Rotación Android habilitada: vertical y horizontal.
 

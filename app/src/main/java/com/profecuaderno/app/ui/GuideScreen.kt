@@ -80,7 +80,7 @@ fun GuideScreen(
         }
     }
 
-    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         ExternalActivityGuard.active = false
         handleDocument(uri)
     }
@@ -88,11 +88,10 @@ fun GuideScreen(
     fun openPicker() {
         pickerMessage = null
         ExternalActivityGuard.active = true
-        runCatching { pickerLauncher.launch(DocumentImportPolicy.mimeTypes) }
+        runCatching { pickerLauncher.launch("*/*") }
             .onFailure {
                 ExternalActivityGuard.active = false
-                pickerMessage = "No pude abrir el selector de documentos de Android. Revisa que la app Archivos/Files del sistema esté habilitada."
-                showFileHelp = true
+                pickerMessage = "No pude abrir el selector de documentos de Android."
             }
     }
 

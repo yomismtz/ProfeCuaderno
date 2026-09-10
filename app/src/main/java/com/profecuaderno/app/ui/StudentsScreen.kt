@@ -79,25 +79,18 @@ fun StudentsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, on
         }
     }
 
-    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         ExternalActivityGuard.active = false
-        if (result.resultCode == Activity.RESULT_OK) importUri(result.data?.data)
-        else importMessage = "No se seleccionó ningún archivo."
+        importUri(uri)
     }
 
     fun openCsvPicker() {
         importMessage = null
-        val mimeTypes = arrayOf("text/csv", "text/plain", "application/vnd.ms-excel", "application/csv", "application/octet-stream")
-        val chooser = DocumentPickerCompat.chooserIntent(mimeTypes, "Seleccionar archivo CSV")
-        if (!DocumentPickerCompat.canResolve(context, chooser)) {
-            showFileHelp = true
-            return
-        }
         ExternalActivityGuard.active = true
-        runCatching { pickerLauncher.launch(chooser) }
+        runCatching { pickerLauncher.launch("*/*") }
             .onFailure {
                 ExternalActivityGuard.active = false
-                showFileHelp = true
+                importMessage = "No pude abrir el selector de archivos de Android."
             }
     }
 

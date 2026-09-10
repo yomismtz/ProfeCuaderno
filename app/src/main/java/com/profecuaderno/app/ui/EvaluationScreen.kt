@@ -81,23 +81,32 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(students, key = { it.id }) { student ->
-                    val categoryScore = remember(refresh, student.id, category.id, weightedKind, mode) {
-                        if (weightedKind != null) WeightedEvaluationStore.weightedScore(db, student.id, category.id)
-                        else db.categoryScore(period.id, student.id, category)
+                    val categoryScore: Double? = remember(refresh, student.id, category.id, weightedKind, mode) {
+                        when {
+                            weightedKind != null -> WeightedEvaluationStore.weightedScoreOrNull(db, student.id, category.id)
+                            mode == EvaluationMode.DIRECT || mode == EvaluationMode.RUBRIC -> {
+                                if (db.hasGradeRecord(student.id, category.id)) db.categoryScore(period.id, student.id, category) else null
+                            }
+                            else -> db.categoryScore(period.id, student.id, category)
+                        }
                     }
-                    val contribution = categoryScore * category.weight / 100.0
+                    val contribution = (categoryScore ?: 0.0) * category.weight / 100.0
                     val finalScore = remember(refresh, student.id) { db.finalPercentage(period.id, student.id) }
 
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(student.name, style = MaterialTheme.typography.titleSmall)
-                                Text("${category.name}: ${"%.1f".format(categoryScore)}/100", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (categoryScore == null) "${category.name}: Sin evaluar"
+                                    else "${category.name}: ${"%.1f".format(categoryScore)}/100",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                                 if (weightedKind != null && assessmentItems.isNotEmpty()) {
                                     val scores = assessmentItems.map { db.getAssessmentScore(student.id, it.id) }
                                     Text("Registrados: ${scores.count { it != null }}/${assessmentItems.size} · 0: ${scores.count { it == 0.0 }}", style = MaterialTheme.typography.labelSmall)
                                 }
-                                if (mode == EvaluationMode.ATTENDANCE) {
+                                if (mode == EvaluationMode.ATTENDANCE && categoryScore != null) {
                                     Text("Aporta ${"%.2f".format(contribution)} de ${"%.1f".format(category.weight)} puntos posibles", style = MaterialTheme.typography.labelSmall)
                                 }
                                 Text("Calificación final acumulada: ${"%.1f".format(finalScore)}%", style = MaterialTheme.typography.bodySmall)
@@ -137,8 +146,8 @@ fun EvaluationScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, 
 }
 
 @Composable
-private fun InlineGradeEditor(initial: Double, onSave: (Double) -> Unit) {
-    var text by remember(initial) { mutableStateOf(if (initial == 0.0) "" else "%.1f".format(initial)) }
+private fun InlineGradeEditor(initial: Double?, onSave: (Double) -> Unit) {
+    var text by remember(initial) { mutableStateOf(initial?.let { "%.1f".format(it) } ?: "") }
     val value = text.replace(',', '.').toDoubleOrNull()
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("0-100") }, modifier = Modifier.width(110.dp), singleLine = true)

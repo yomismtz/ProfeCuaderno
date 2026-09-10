@@ -101,19 +101,10 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
                             Column(Modifier.weight(1f)) {
                                 Text(category.name, style = MaterialTheme.typography.titleMedium)
                                 Text("Vale ${"%.1f".format(category.weight)}% de la calificación final")
-                                Text(
-                                    "Forma de evaluar: ${weightedKind?.label ?: mode.label}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Text("Forma de evaluar: ${weightedKind?.label ?: mode.label}", style = MaterialTheme.typography.bodySmall)
                                 when {
-                                    weightedKind != null -> Text(
-                                        "${assessmentItems.size} elementos · pesos internos ${"%.1f".format(internalTotal)}%${if (abs(internalTotal-100.0)<0.001) " ✓" else " ⚠"}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    mode == EvaluationMode.RUBRIC -> Text(
-                                        "${criteria.size} criterios · ${"%.1f".format(internalTotal)}%${if (abs(internalTotal-100.0)<0.001) " ✓" else " ⚠"}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                    weightedKind != null -> Text("${assessmentItems.size} elementos · pesos internos ${"%.1f".format(internalTotal)}%${if (abs(internalTotal-100.0)<0.001) " ✓" else " ⚠"}", style = MaterialTheme.typography.bodySmall)
+                                    mode == EvaluationMode.RUBRIC -> Text("${criteria.size} criterios · ${"%.1f".format(internalTotal)}%${if (abs(internalTotal-100.0)<0.001) " ✓" else " ⚠"}", style = MaterialTheme.typography.bodySmall)
                                     mode == EvaluationMode.ATTENDANCE -> Text("Usa el porcentaje actual del reporte de asistencia.", style = MaterialTheme.typography.bodySmall)
                                     else -> Text("Se captura una sola calificación.", style = MaterialTheme.typography.bodySmall)
                                 }
@@ -209,14 +200,15 @@ fun RubricsScreen(db: TeacherDbHelper, period: AcademicPeriod, refresh: Int, onC
         AlertDialog(
             onDismissRequest = { deletingCategory = null },
             title = { Text("Eliminar rubro") },
-            text = { Text("¿Eliminar '${category.name}'? También se eliminarán sus actividades, exámenes, rúbrica y calificaciones.") },
+            text = { Text("¿Enviar '${category.name}' a Papelera? Sus actividades, exámenes, rúbrica y calificaciones se conservarán para poder restaurarlo.") },
             confirmButton = {
                 TextButton(onClick = {
-                    WeightedEvaluationStore.setKind(db, category.id, null)
+                    // No borres la configuración ponderada aquí: deleteCategory es interceptado
+                    // por la Papelera y el rubro todavía debe poder restaurarse íntegramente.
                     db.deleteCategory(category.id)
                     deletingCategory = null
                     onChanged()
-                }) { Text("Eliminar") }
+                }) { Text("Enviar a Papelera") }
             },
             dismissButton = { TextButton(onClick = { deletingCategory = null }) { Text("Cancelar") } }
         )
@@ -272,9 +264,7 @@ private fun CategoryDialog(
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        EvaluationChoice.entries.forEach { option ->
-                            DropdownMenuItem(text = { Text(option.label) }, onClick = { choice = option; expanded = false })
-                        }
+                        EvaluationChoice.entries.forEach { option -> DropdownMenuItem(text = { Text(option.label) }, onClick = { choice = option; expanded = false }) }
                     }
                 }
                 Text(
@@ -290,10 +280,7 @@ private fun CategoryDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0,
-                onClick = { onSave(initial.copy(name = name, weight = weight!!), choice) }
-            ) { Text("Guardar") }
+            TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(initial.copy(name = name, weight = weight!!), choice) }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
@@ -322,15 +309,10 @@ private fun WeightedItemsDialog(
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 620.dp)) {
                 Text("Pon nombre y porcentaje a cada ${if (kind == WeightedEvaluationKind.EXAMS) "examen" else "actividad"}. Los porcentajes internos deben sumar 100%.")
-                Text(
-                    "Total interno: ${"%.1f".format(total)}%${if (abs(total-100.0)<0.001) " ✓" else " ⚠"}",
-                    color = if (abs(total-100.0)<0.001 || items.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-                )
+                Text("Total interno: ${"%.1f".format(total)}%${if (abs(total-100.0)<0.001) " ✓" else " ⚠"}", color = if (abs(total-100.0)<0.001 || items.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
                 if (items.isEmpty()) {
-                    OutlinedButton(onClick = { applyPreset = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (kind == WeightedEvaluationKind.EXAMS) "Usar ejemplo de exámenes" else "Usar ejemplo de actividades")
-                    }
+                    OutlinedButton(onClick = { applyPreset = true }, modifier = Modifier.fillMaxWidth()) { Text(if (kind == WeightedEvaluationKind.EXAMS) "Usar ejemplo de exámenes" else "Usar ejemplo de actividades") }
                     Spacer(Modifier.height(6.dp))
                 }
                 if (items.size > 1) {
@@ -345,10 +327,7 @@ private fun WeightedItemsDialog(
                         val weight = WeightedEvaluationStore.weightFor(db, item.id)
                         OutlinedCard(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.name)
-                                    Text("${"%.1f".format(weight)}%", style = MaterialTheme.typography.bodySmall)
-                                }
+                                Column(Modifier.weight(1f)) { Text(item.name); Text("${"%.1f".format(weight)}%", style = MaterialTheme.typography.bodySmall) }
                                 IconButton(onClick = { editing = item }) { Icon(Icons.Default.Edit, "Editar") }
                                 IconButton(onClick = { deleting = item }) { Icon(Icons.Default.Delete, "Eliminar") }
                             }
@@ -356,127 +335,70 @@ private fun WeightedItemsDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { showNew = true }) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Agregar ${if (kind == WeightedEvaluationKind.EXAMS) "examen" else "actividad"}")
-                }
+                Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Agregar ${if (kind == WeightedEvaluationKind.EXAMS) "examen" else "actividad"}") }
             }
         },
-        confirmButton = {
-            TextButton(enabled = items.isEmpty() || abs(total - 100.0) < 0.001, onClick = onDismiss) { Text("Listo") }
-        }
+        confirmButton = { TextButton(enabled = items.isEmpty() || abs(total - 100.0) < 0.001, onClick = onDismiss) { Text("Listo") } }
     )
 
     val preset = if (kind == WeightedEvaluationKind.EXAMS) examPreset else activityPreset
     if (applyPreset) {
         AlertDialog(
-            onDismissRequest = { applyPreset = false },
-            title = { Text(preset.name) },
+            onDismissRequest = { applyPreset = false }, title = { Text(preset.name) },
             text = { Column { preset.items.forEach { Text("${it.first} — ${"%.0f".format(it.second)}%") } } },
-            confirmButton = {
-                TextButton(onClick = {
-                    preset.items.forEachIndexed { index, pair ->
-                        val id = db.saveAssessmentItem(AssessmentItem(0, category.id, pair.first, index))
-                        WeightedEvaluationStore.setWeight(db, id, pair.second)
-                    }
-                    WeightedEvaluationStore.recalculateCategory(db, category)
-                    applyPreset = false
-                    onChanged()
-                }) { Text("Usar ejemplo") }
-            },
+            confirmButton = { TextButton(onClick = {
+                preset.items.forEachIndexed { index, pair ->
+                    val id = db.saveAssessmentItem(AssessmentItem(0, category.id, pair.first, index))
+                    WeightedEvaluationStore.setWeight(db, id, pair.second)
+                }
+                WeightedEvaluationStore.recalculateCategory(db, category); applyPreset = false; onChanged()
+            }) { Text("Usar ejemplo") } },
             dismissButton = { TextButton(onClick = { applyPreset = false }) { Text("Cancelar") } }
         )
     }
 
-    if (showNew) {
-        WeightedItemEditor(
-            title = if (kind == WeightedEvaluationKind.EXAMS) "Nuevo examen" else "Nueva actividad",
-            initialName = "",
-            initialWeight = 0.0,
-            placeholder = if (kind == WeightedEvaluationKind.EXAMS) "Ej. Examen 1: Oclusión" else "Ej. Actividad 1: Mapa conceptual",
-            onDismiss = { showNew = false },
-            onSave = { name, weight ->
-                val id = db.saveAssessmentItem(AssessmentItem(0, category.id, name, items.size))
-                WeightedEvaluationStore.setWeight(db, id, weight)
-                WeightedEvaluationStore.recalculateCategory(db, category)
-                showNew = false
-                onChanged()
-            }
-        )
-    }
+    if (showNew) WeightedItemEditor(
+        title = if (kind == WeightedEvaluationKind.EXAMS) "Nuevo examen" else "Nueva actividad", initialName = "", initialWeight = 0.0,
+        placeholder = if (kind == WeightedEvaluationKind.EXAMS) "Ej. Examen 1: Oclusión" else "Ej. Actividad 1: Mapa conceptual",
+        onDismiss = { showNew = false }, onSave = { name, weight ->
+            val id = db.saveAssessmentItem(AssessmentItem(0, category.id, name, items.size)); WeightedEvaluationStore.setWeight(db, id, weight)
+            WeightedEvaluationStore.recalculateCategory(db, category); showNew = false; onChanged()
+        }
+    )
 
-    editing?.let { item ->
-        WeightedItemEditor(
-            title = "Editar",
-            initialName = item.name,
-            initialWeight = WeightedEvaluationStore.weightFor(db, item.id),
-            placeholder = "Nombre",
-            onDismiss = { editing = null },
-            onSave = { name, weight ->
-                db.saveAssessmentItem(item.copy(name = name))
-                WeightedEvaluationStore.setWeight(db, item.id, weight)
-                WeightedEvaluationStore.recalculateCategory(db, category)
-                editing = null
-                onChanged()
-            }
-        )
-    }
+    editing?.let { item -> WeightedItemEditor(
+        title = "Editar", initialName = item.name, initialWeight = WeightedEvaluationStore.weightFor(db, item.id), placeholder = "Nombre",
+        onDismiss = { editing = null }, onSave = { name, weight ->
+            db.saveAssessmentItem(item.copy(name = name)); WeightedEvaluationStore.setWeight(db, item.id, weight)
+            WeightedEvaluationStore.recalculateCategory(db, category); editing = null; onChanged()
+        }
+    ) }
 
-    deleting?.let { item ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Eliminar") },
-            text = { Text("¿Eliminar '${item.name}' y sus calificaciones?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    db.deleteAssessmentItem(item.id)
-                    WeightedEvaluationStore.recalculateCategory(db, category)
-                    deleting = null
-                    onChanged()
-                }) { Text("Eliminar") }
-            },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
-        )
-    }
+    deleting?.let { item -> AlertDialog(
+        onDismissRequest = { deleting = null }, title = { Text("Eliminar") }, text = { Text("¿Eliminar '${item.name}' y sus calificaciones?") },
+        confirmButton = { TextButton(onClick = { db.deleteAssessmentItem(item.id); WeightedEvaluationStore.recalculateCategory(db, category); deleting = null; onChanged() }) { Text("Eliminar") } },
+        dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
+    ) }
 }
 
 @Composable
-private fun WeightedItemEditor(
-    title: String,
-    initialName: String,
-    initialWeight: Double,
-    placeholder: String,
-    onDismiss: () -> Unit,
-    onSave: (String, Double) -> Unit
-) {
+private fun WeightedItemEditor(title: String, initialName: String, initialWeight: Double, placeholder: String, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var weightText by remember(initialWeight) { mutableStateOf(if (initialWeight == 0.0) "" else initialWeight.toString()) }
     val weight = weightText.replace(',', '.').toDoubleOrNull()
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, placeholder = { Text(placeholder) }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(weightText, { weightText = it }, label = { Text("Porcentaje dentro del rubro") }, placeholder = { Text("Ej. 10") }, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(name, weight!!) }) { Text("Guardar") }
-        },
+        onDismissRequest = onDismiss, title = { Text(title) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, placeholder = { Text(placeholder) }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(weightText, { weightText = it }, label = { Text("Porcentaje dentro del rubro") }, placeholder = { Text("Ej. 10") }, modifier = Modifier.fillMaxWidth())
+        } },
+        confirmButton = { TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(name, weight!!) }) { Text("Guardar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
 
 @Composable
-private fun RubricDialog(
-    db: TeacherDbHelper,
-    category: EvaluationCategory,
-    refresh: Int,
-    onDismiss: () -> Unit,
-    onChanged: () -> Unit
-) {
+private fun RubricDialog(db: TeacherDbHelper, category: EvaluationCategory, refresh: Int, onDismiss: () -> Unit, onChanged: () -> Unit) {
     val criteria = remember(refresh, category.id) { db.getRubricCriteria(category.id) }
     val total = criteria.sumOf { it.weight }
     var showNew by remember { mutableStateOf(false) }
@@ -485,75 +407,44 @@ private fun RubricDialog(
     var selectedPreset by remember { mutableStateOf<RubricPreset?>(null) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rúbrica · ${category.name}") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 620.dp)) {
-                Text("Los criterios internos deben sumar 100%.")
-                Text("Total: ${"%.1f".format(total)}%", color = if (abs(total-100.0)<0.001 || criteria.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(8.dp))
-                if (criteria.isEmpty()) {
-                    Text("Usar una rúbrica", style = MaterialTheme.typography.titleSmall)
-                    rubricPresets.forEach { preset ->
-                        OutlinedButton(onClick = { selectedPreset = preset }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Usar esta rúbrica: ${preset.name}")
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    HorizontalDivider()
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { showNew = true }, modifier = Modifier.fillMaxWidth()) { Text("Crear mi propia rúbrica") }
-                    Spacer(Modifier.height(8.dp))
-                }
-                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(criteria, key = { it.id }) { criterion ->
-                        OutlinedCard(Modifier.fillMaxWidth()) {
-                            Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("${criterion.name} · ${"%.1f".format(criterion.weight)}%", modifier = Modifier.weight(1f))
-                                IconButton(onClick = { editing = criterion }) { Icon(Icons.Default.Edit, "Editar") }
-                                IconButton(onClick = { deleting = criterion }) { Icon(Icons.Default.Delete, "Eliminar") }
-                            }
-                        }
-                    }
-                }
-                if (criteria.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Agregar criterio") }
-                }
+        onDismissRequest = onDismiss, title = { Text("Rúbrica · ${category.name}") },
+        text = { Column(Modifier.fillMaxWidth().heightIn(max = 620.dp)) {
+            Text("Los criterios internos deben sumar 100%.")
+            Text("Total: ${"%.1f".format(total)}%", color = if (abs(total-100.0)<0.001 || criteria.isEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(8.dp))
+            if (criteria.isEmpty()) {
+                Text("Usar una rúbrica", style = MaterialTheme.typography.titleSmall)
+                rubricPresets.forEach { preset -> OutlinedButton(onClick = { selectedPreset = preset }, modifier = Modifier.fillMaxWidth()) { Text("Usar esta rúbrica: ${preset.name}") }; Spacer(Modifier.height(4.dp)) }
+                HorizontalDivider(); Spacer(Modifier.height(8.dp)); Button(onClick = { showNew = true }, modifier = Modifier.fillMaxWidth()) { Text("Crear mi propia rúbrica") }; Spacer(Modifier.height(8.dp))
             }
-        },
+            LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(criteria, key = { it.id }) { criterion -> OutlinedCard(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${criterion.name} · ${"%.1f".format(criterion.weight)}%", modifier = Modifier.weight(1f))
+                        IconButton(onClick = { editing = criterion }) { Icon(Icons.Default.Edit, "Editar") }
+                        IconButton(onClick = { deleting = criterion }) { Icon(Icons.Default.Delete, "Eliminar") }
+                    }
+                } }
+            }
+            if (criteria.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Agregar criterio") } }
+        } },
         confirmButton = { TextButton(enabled = criteria.isEmpty() || abs(total-100.0)<0.001, onClick = onDismiss) { Text("Listo") } }
     )
 
-    selectedPreset?.let { preset ->
-        AlertDialog(
-            onDismissRequest = { selectedPreset = null },
-            title = { Text("${preset.name}") },
-            text = { Column { preset.criteria.forEach { Text("${it.first} — ${"%.0f".format(it.second)}%") } } },
-            confirmButton = {
-                TextButton(onClick = {
-                    preset.criteria.forEachIndexed { index, pair -> db.saveRubricCriterion(RubricCriterion(0, category.id, pair.first, pair.second, index)) }
-                    selectedPreset = null
-                    onChanged()
-                }) { Text("Usar esta rúbrica") }
-            },
-            dismissButton = { TextButton(onClick = { selectedPreset = null }) { Text("Cancelar") } }
-        )
-    }
+    selectedPreset?.let { preset -> AlertDialog(
+        onDismissRequest = { selectedPreset = null }, title = { Text(preset.name) },
+        text = { Column { preset.criteria.forEach { Text("${it.first} — ${"%.0f".format(it.second)}%") } } },
+        confirmButton = { TextButton(onClick = { preset.criteria.forEachIndexed { index, pair -> db.saveRubricCriterion(RubricCriterion(0, category.id, pair.first, pair.second, index)) }; selectedPreset = null; onChanged() }) { Text("Usar esta rúbrica") } },
+        dismissButton = { TextButton(onClick = { selectedPreset = null }) { Text("Cancelar") } }
+    ) }
 
-    if (showNew) CriterionDialog(RubricCriterion(0, category.id, "", 0.0, criteria.size), { showNew = false }) {
-        db.saveRubricCriterion(it); showNew = false; onChanged()
-    }
+    if (showNew) CriterionDialog(RubricCriterion(0, category.id, "", 0.0, criteria.size), { showNew = false }) { db.saveRubricCriterion(it); showNew = false; onChanged() }
     editing?.let { criterion -> CriterionDialog(criterion, { editing = null }) { db.saveRubricCriterion(it); editing = null; onChanged() } }
-    deleting?.let { criterion ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Eliminar criterio") },
-            text = { Text("¿Eliminar '${criterion.name}'?") },
-            confirmButton = { TextButton(onClick = { db.deleteRubricCriterion(criterion.id); deleting = null; onChanged() }) { Text("Eliminar") } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
-        )
-    }
+    deleting?.let { criterion -> AlertDialog(
+        onDismissRequest = { deleting = null }, title = { Text("Eliminar criterio") }, text = { Text("¿Eliminar '${criterion.name}'?") },
+        confirmButton = { TextButton(onClick = { db.deleteRubricCriterion(criterion.id); deleting = null; onChanged() }) { Text("Eliminar") } },
+        dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } }
+    ) }
 }
 
 @Composable
@@ -562,14 +453,11 @@ private fun CriterionDialog(initial: RubricCriterion, onDismiss: () -> Unit, onS
     var weightText by remember(initial.id) { mutableStateOf(if (initial.weight == 0.0) "" else initial.weight.toString()) }
     val weight = weightText.replace(',', '.').toDoubleOrNull()
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial.id == 0L) "Nuevo criterio" else "Editar criterio") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("¿Qué vas a evaluar?") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(weightText, { weightText = it }, label = { Text("Porcentaje dentro de la rúbrica") }, modifier = Modifier.fillMaxWidth())
-            }
-        },
+        onDismissRequest = onDismiss, title = { Text(if (initial.id == 0L) "Nuevo criterio" else "Editar criterio") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(name, { name = it }, label = { Text("¿Qué vas a evaluar?") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(weightText, { weightText = it }, label = { Text("Porcentaje dentro de la rúbrica") }, modifier = Modifier.fillMaxWidth())
+        } },
         confirmButton = { TextButton(enabled = name.isNotBlank() && weight != null && weight in 0.0..100.0, onClick = { onSave(initial.copy(name = name, weight = weight!!)) }) { Text("Guardar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

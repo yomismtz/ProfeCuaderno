@@ -1,17 +1,18 @@
 package com.profecuaderno.app
 
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.profecuaderno.app.security.AppSecurityManager
 import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.network.CentralBackend
+import com.profecuaderno.app.network.TeacherSyncScheduler
 import com.profecuaderno.app.notifications.ReminderScheduler
+import com.profecuaderno.app.security.AppSecurityManager
 import com.profecuaderno.app.ui.*
 
 class MainActivity : FragmentActivity() {
@@ -37,7 +38,11 @@ class MainActivity : FragmentActivity() {
                     val db = remember { TeacherDbHelper(context) }
                     val backend = remember { CentralBackend(context) }
                     var onlineSession by remember { mutableStateOf(!backend.tokenStore.accessToken.isNullOrBlank()) }
-                    LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
+                    LaunchedEffect(Unit) {
+                        ReminderScheduler.ensureDaily(context)
+                        TeacherSyncScheduler.ensurePeriodic(context)
+                        TeacherSyncScheduler.enqueueNow(context)
+                    }
                     var refresh by remember { mutableIntStateOf(0) }
                     val teacher = remember(refresh) { db.getTeacher() }
                     val period = remember(refresh) { db.getActivePeriod() }
@@ -55,13 +60,22 @@ class MainActivity : FragmentActivity() {
                     NotebookBackground(style = activeTheme) {
                         when {
                             selectedTheme == null -> ThemeSelectionScreen(initial = AgendaThemeStyle.MINT_LAVENDER, onSelected = { saveTheme(it) })
-                            !onlineSession -> OnlineAuthScreen(backend = backend, onAuthenticated = { onlineSession = true })
+                            !onlineSession -> OnlineAuthScreen(
+                                backend = backend,
+                                onAuthenticated = {
+                                    onlineSession = true
+                                    TeacherSyncScheduler.enqueueNow(context)
+                                },
+                            )
                             !unlocked && AppSecurityManager.isLockEnabled(context) -> AppLockScreen(onUnlocked = { unlocked = true })
-                            teacher == null -> TeacherSetupScreen(onSave = { db.saveTeacher(it); refresh++ })
+                            teacher == null -> TeacherSetupScreen(onSave = { db.saveTeacher(it); refresh++; TeacherSyncScheduler.enqueueNow(context) })
                             else -> TeacherOnlineHost(db = db, period = period, backend = backend) {
                                 ProfeCuadernoApp(
                                     db = db,
-                                    onDataChanged = { refresh++ },
+                                    onDataChanged = {
+                                        refresh++
+                                        TeacherSyncScheduler.enqueueNow(context)
+                                    },
                                     globalRefresh = refresh,
                                     currentTheme = activeTheme,
                                     onThemeChanged = { saveTheme(it) },

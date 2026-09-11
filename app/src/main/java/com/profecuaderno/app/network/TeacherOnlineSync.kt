@@ -61,6 +61,7 @@ class TeacherOnlineSync(
         val allSessions = db.listAttendanceSessions(period.id)
         val workedSessions = allSessions.filter { it.worked }
         val categories = db.getCategories(period.id)
+        val evaluationFinalized = EvaluationSetupStore.isFinalized(db, period.id)
 
         var matched = 0
         var attendanceSent = 0
@@ -92,23 +93,27 @@ class TeacherOnlineSync(
             }.onFailure { failedWrites++ }
         }
 
-        runCatching {
-            backend.api.setEvaluationPlan(
-                classroom.id,
-                EvaluationPlanRequest(
-                    finalized = EvaluationSetupStore.isFinalized(db, period.id),
-                    categories = categories.map { category ->
-                        EvaluationPlanCategoryRequest(
-                            categoryKey = "category-${category.id}",
-                            name = category.name,
-                            weight = category.weight,
-                            mode = category.toServerEvaluationMode(),
-                            position = category.position,
-                        )
-                    },
-                ),
-            )
-        }.onFailure { failedWrites++ }
+        // Un esquema en borrador no reemplaza lo que el alumno ya ve. Solo se
+        // publica al servidor después de que el docente lo finaliza nuevamente.
+        if (evaluationFinalized) {
+            runCatching {
+                backend.api.setEvaluationPlan(
+                    classroom.id,
+                    EvaluationPlanRequest(
+                        finalized = true,
+                        categories = categories.map { category ->
+                            EvaluationPlanCategoryRequest(
+                                categoryKey = "category-${category.id}",
+                                name = category.name,
+                                weight = category.weight,
+                                mode = category.toServerEvaluationMode(),
+                                position = category.position,
+                            )
+                        },
+                    ),
+                )
+            }.onFailure { failedWrites++ }
+        }
 
         localStudents.forEach localLoop@ { local ->
             val email = local.email.trim().lowercase()
@@ -131,24 +136,26 @@ class TeacherOnlineSync(
                     .onFailure { failedWrites++ }
             }
 
-            categories.forEach { category ->
-                val activityKey = "category-${category.id}"
-                val score = db.categoryScoreOrNull(period.id, local.id, category)
-                if (score == null) {
-                    runCatching { backend.api.deleteGrade(classroom.id, online.id, activityKey) }
-                        .onFailure { failedWrites++ }
-                } else {
-                    val request = GradeRequest(
-                        studentId = online.id,
-                        category = category.name,
-                        activityKey = activityKey,
-                        activityName = category.name,
-                        score = score,
-                        maxScore = 100.0,
-                    )
-                    runCatching { backend.api.setGrade(classroom.id, request) }
-                        .onSuccess { gradesSent++ }
-                        .onFailure { failedWrites++ }
+            if (evaluationFinalized) {
+                categories.forEach { category ->
+                    val activityKey = "category-${category.id}"
+                    val score = db.categoryScoreOrNull(period.id, local.id, category)
+                    if (score == null) {
+                        runCatching { backend.api.deleteGrade(classroom.id, online.id, activityKey) }
+                            .onFailure { failedWrites++ }
+                    } else {
+                        val request = GradeRequest(
+                            studentId = online.id,
+                            category = category.name,
+                            activityKey = activityKey,
+                            activityName = category.name,
+                            score = score,
+                            maxScore = 100.0,
+                        )
+                        runCatching { backend.api.setGrade(classroom.id, request) }
+                            .onSuccess { gradesSent++ }
+                            .onFailure { failedWrites++ }
+                    }
                 }
             }
         }

@@ -82,7 +82,7 @@ def _policy_dict(row: AttendancePolicy) -> dict:
     }
 
 
-def _summary(rows: list[Attendance], policy: AttendancePolicy) -> dict:
+def _metrics(rows: list[Attendance], policy: AttendancePolicy) -> dict:
     counts = {"present": 0, "absent": 0, "late": 0, "justified": 0}
     for row in rows:
         status = (row.status or "").strip().lower()
@@ -108,12 +108,56 @@ def _summary(rows: list[Attendance], policy: AttendancePolicy) -> dict:
     if effect == "excluded":
         denominator = counts["present"] + counts["absent"] + counts["late"]
 
-    percentage = 0.0 if denominator == 0 else (earned / denominator) * 100.0
     return {
-        "records": len(rows),
         "counts": counts,
         "late_penalties": late_penalties,
         "effective_absences": absent + late_penalties,
+        "earned": earned,
+        "denominator": denominator,
+    }
+
+
+def _summary(rows: list[Attendance], policy: AttendancePolicy) -> dict:
+    metrics = _metrics(rows, policy)
+    denominator = metrics["denominator"]
+    percentage = 0.0 if denominator == 0 else (metrics["earned"] / denominator) * 100.0
+    return {
+        "records": len(rows),
+        "counts": metrics["counts"],
+        "late_penalties": metrics["late_penalties"],
+        "effective_absences": metrics["effective_absences"],
+        "attendance_percent": round(percentage, 2),
+        "policy": _policy_dict(policy),
+    }
+
+
+def _aggregate_summary(rows: list[Attendance], policy: AttendancePolicy) -> dict:
+    """Apply attendance penalties per student first, then aggregate the class."""
+    groups: dict[int, list[Attendance]] = {}
+    for row in rows:
+        groups.setdefault(row.student_id, []).append(row)
+
+    counts = {"present": 0, "absent": 0, "late": 0, "justified": 0}
+    total_penalties = 0
+    total_effective_absences = 0
+    total_earned = 0
+    total_denominator = 0
+
+    for student_rows in groups.values():
+        metrics = _metrics(student_rows, policy)
+        for key in counts:
+            counts[key] += metrics["counts"][key]
+        total_penalties += metrics["late_penalties"]
+        total_effective_absences += metrics["effective_absences"]
+        total_earned += metrics["earned"]
+        total_denominator += metrics["denominator"]
+
+    percentage = 0.0 if total_denominator == 0 else (total_earned / total_denominator) * 100.0
+    return {
+        "records": len(rows),
+        "counts": counts,
+        "late_penalties": total_penalties,
+        "effective_absences": total_effective_absences,
         "attendance_percent": round(percentage, 2),
         "policy": _policy_dict(policy),
     }
@@ -294,7 +338,7 @@ def class_attendance_summary(
         select(ClassStudent.student_id).where(ClassStudent.class_id == class_id)
     ).all()
     rows = db.scalars(select(Attendance).where(Attendance.class_id == class_id)).all()
-    overall = _summary(_countable_rows(db, class_id, rows), policy)
+    overall = _aggregate_summary(_countable_rows(db, class_id, rows), policy)
     overall.update({
         "class_id": class_id,
         "class_name": item.name,
@@ -325,7 +369,7 @@ def institution_attendance_summary(
         enrolled = db.scalar(
             select(func.count(ClassStudent.id)).where(ClassStudent.class_id == item.id)
         ) or 0
-        summary = _summary(_countable_rows(db, item.id, rows), policy)
+        summary = _aggregate_summary(_countable_rows(db, item.id, rows), policy)
         output.append({
             "class_id": item.id,
             "class_name": item.name,

@@ -44,10 +44,11 @@ def test_register_and_login_student():
 
 def test_complete_teacher_student_director_flow_and_privacy():
     with TestClient(app) as client:
-        director_email, director, director_headers = register(client, "director", "Director Test")
+        _, director, director_headers = register(client, "director", "Director Test")
         teacher_email, teacher, teacher_headers = register(client, "teacher", "Teacher Test")
+        teacher2_email, teacher2, teacher2_headers = register(client, "teacher", "Teacher Two")
         _, student, student_headers = register(client, "student", "Student Test")
-        _, outsider, outsider_headers = register(client, "student", "Outsider Student")
+        _, outsider, _ = register(client, "student", "Outsider Student")
 
         institution_name = f"School {uuid4().hex[:10]}"
         institution = client.post(
@@ -58,7 +59,16 @@ def test_complete_teacher_student_director_flow_and_privacy():
         assert institution.status_code == 200, institution.text
         institution_id = institution.json()["id"]
 
-        # A teacher may create a class before being attached to a school.
+        # Duplicate school names return a clean conflict instead of a database error.
+        _, _, duplicate_director_headers = register(client, "director", "Duplicate Director")
+        duplicate_school = client.post(
+            "/institutions",
+            json={"name": institution_name.lower()},
+            headers=duplicate_director_headers,
+        )
+        assert duplicate_school.status_code == 409
+
+        # Teachers may create classes before being attached to a school.
         classroom = client.post(
             "/classes",
             json={"name": "1A", "subject": "Matemáticas", "period_name": "2026-2027"},
@@ -69,6 +79,15 @@ def test_complete_teacher_student_director_flow_and_privacy():
         class_id = classroom_data["id"]
         assert classroom_data["institution_id"] is None
 
+        classroom2 = client.post(
+            "/classes",
+            json={"name": "2B", "subject": "Ciencias", "period_name": "2026-2027"},
+            headers=teacher2_headers,
+        )
+        assert classroom2.status_code == 200, classroom2.text
+        classroom2_data = classroom2.json()
+        class2_id = classroom2_data["id"]
+
         attached = client.post(
             "/institutions/attach-teacher",
             params={"email": teacher_email},
@@ -77,14 +96,23 @@ def test_complete_teacher_student_director_flow_and_privacy():
         assert attached.status_code == 200, attached.text
         assert attached.json()["institution_id"] == institution_id
 
-        # Existing classes are backfilled when the teacher is attached.
+        attached2 = client.post(
+            "/institutions/attach-teacher",
+            params={"email": teacher2_email},
+            headers=director_headers,
+        )
+        assert attached2.status_code == 200, attached2.text
+
+        # Existing classes are backfilled when each teacher is attached.
         director_classes = client.get("/classes", headers=director_headers)
         assert director_classes.status_code == 200
         assert any(row["id"] == class_id and row["institution_id"] == institution_id for row in director_classes.json())
+        assert any(row["id"] == class2_id and row["institution_id"] == institution_id for row in director_classes.json())
 
         teachers = client.get("/institutions/teachers", headers=director_headers)
         assert teachers.status_code == 200
         assert any(row["id"] == teacher["id"] for row in teachers.json())
+        assert any(row["id"] == teacher2["id"] for row in teachers.json())
 
         institution_get = client.get("/institution", headers=teacher_headers)
         assert institution_get.status_code == 200
@@ -161,6 +189,73 @@ def test_complete_teacher_student_director_flow_and_privacy():
         assert teacher_notices.status_code == 200
         assert teacher_notices.json()[0]["title"] == "Consejo técnico"
         assert client.get("/teacher-notices", headers=student_headers).status_code == 403
+
+        # Schedule is server-backed and validates teacher, room and class ownership.
+        first_slot = client.post(
+            "/schedule",
+            json={
+                "teacher_id": teacher["id"],
+                "class_id": class_id,
+                "weekday": 1,
+                "start_time": "07:00",
+                "end_time": "07:50",
+                "room": "A1",
+            },
+            headers=director_headers,
+        )
+        assert first_slot.status_code == 200, first_slot.text
+        first_slot_id = first_slot.json()["id"]
+
+        teacher_conflict = client.post(
+            "/schedule",
+            json={
+                "teacher_id": teacher["id"],
+                "class_id": class_id,
+                "weekday": 1,
+                "start_time": "07:30",
+                "end_time": "08:10",
+                "room": "A2",
+            },
+            headers=director_headers,
+        )
+        assert teacher_conflict.status_code == 409
+
+        room_conflict = client.post(
+            "/schedule",
+            json={
+                "teacher_id": teacher2["id"],
+                "class_id": class2_id,
+                "weekday": 1,
+                "start_time": "07:20",
+                "end_time": "08:00",
+                "room": "A1",
+            },
+            headers=director_headers,
+        )
+        assert room_conflict.status_code == 409
+
+        second_slot = client.post(
+            "/schedule",
+            json={
+                "teacher_id": teacher2["id"],
+                "class_id": class2_id,
+                "weekday": 1,
+                "start_time": "07:20",
+                "end_time": "08:00",
+                "room": "B2",
+            },
+            headers=director_headers,
+        )
+        assert second_slot.status_code == 200, second_slot.text
+
+        # Students only receive schedule entries for classes they joined.
+        student_schedule = client.get("/schedule", headers=student_headers)
+        assert student_schedule.status_code == 200
+        assert [row["id"] for row in student_schedule.json()] == [first_slot_id]
+
+        deleted = client.delete(f"/schedule/{first_slot_id}", headers=director_headers)
+        assert deleted.status_code == 200
+        assert client.get("/schedule", headers=student_headers).json() == []
 
         # Team membership information remains outside Director's permissions.
         team_activity = client.post(

@@ -2,8 +2,10 @@ package com.profecuaderno.app.network
 
 import android.content.Context
 import com.profecuaderno.app.data.AcademicPeriod
+import com.profecuaderno.app.data.AttendancePolicyStore
 import com.profecuaderno.app.data.AttendanceStatus
 import com.profecuaderno.app.data.EvaluationMode
+import com.profecuaderno.app.data.JustifiedEffect
 import com.profecuaderno.app.data.TeamFormationStore
 import com.profecuaderno.app.data.TeacherDbHelper
 
@@ -31,11 +33,7 @@ class TeacherOnlineSync(
                 it.periodName.trim().equals(period.type.trim(), ignoreCase = true)
         }
         val classroom = existing ?: backend.api.createClass(
-            CreateClassRequest(
-                name = period.name,
-                subject = period.name,
-                periodName = period.type,
-            )
+            CreateClassRequest(name = period.name, subject = period.name, periodName = period.type)
         )
         prefs.edit().putInt("period_${period.id}", classroom.id).apply()
         return classroom
@@ -57,15 +55,39 @@ class TeacherOnlineSync(
         val onlineStudents = backend.api.students(classroom.id)
         val byEmail = onlineStudents.associateBy { it.email.trim().lowercase() }
         val localStudents = db.getStudents(period.id)
-        val sessions = db.listAttendanceSessions(period.id).filter { it.worked }
-        val categories = db.getCategories(period.id)
-            .filter { db.effectiveEvaluationMode(it) != EvaluationMode.ATTENDANCE }
+        val allSessions = db.listAttendanceSessions(period.id)
+        val workedSessions = allSessions.filter { it.worked }
+        val categories = db.getCategories(period.id).filter { db.effectiveEvaluationMode(it) != EvaluationMode.ATTENDANCE }
 
         var matched = 0
         var attendanceSent = 0
         var gradesSent = 0
         var failedWrites = 0
         val unmatched = mutableListOf<String>()
+
+        val localPolicy = AttendancePolicyStore.policy(db, period.id)
+        runCatching {
+            backend.api.setAttendancePolicy(
+                classroom.id,
+                AttendancePolicyRequest(
+                    latePerAbsence = localPolicy.latePerAbsence,
+                    justifiedEffect = localPolicy.justifiedEffect.toServerValue(),
+                )
+            )
+        }.onFailure { failedWrites++ }
+
+        allSessions.forEach { session ->
+            runCatching {
+                backend.api.setAttendanceSession(
+                    classroom.id,
+                    AttendanceSessionRequest(
+                        date = session.date,
+                        title = session.title.ifBlank { "Clase" },
+                        worked = session.worked,
+                    )
+                )
+            }.onFailure { failedWrites++ }
+        }
 
         localStudents.forEach localLoop@ { local ->
             val email = local.email.trim().lowercase()
@@ -76,7 +98,7 @@ class TeacherOnlineSync(
             }
             matched++
 
-            sessions.forEach sessionLoop@ { session ->
+            workedSessions.forEach sessionLoop@ { session ->
                 val status = db.getAttendanceStatus(session.id, local.id) ?: return@sessionLoop
                 val request = AttendanceRequest(
                     studentId = online.id,
@@ -185,8 +207,7 @@ class TeacherOnlineSync(
         return classroom to backend.api.teamActivities(classroom.id)
     }
 
-    suspend fun participationSummary(activityId: Int): List<ParticipationSummaryDto> =
-        backend.api.participationSummary(activityId)
+    suspend fun participationSummary(activityId: Int): List<ParticipationSummaryDto> = backend.api.participationSummary(activityId)
 
     suspend fun reviewParticipation(activityId: Int, studentId: Int, resolution: String, note: String = "") {
         backend.api.reviewParticipation(
@@ -199,19 +220,23 @@ class TeacherOnlineSync(
     suspend fun closeTeamActivity(activityId: Int) {
         backend.api.setTeamScores(
             activityId,
-            TeamScoresRequest(
-                baseScores = emptyMap(),
-                individualScores = emptyMap(),
-                closeAndConsolidate = true,
-            ),
+            TeamScoresRequest(baseScores = emptyMap(), individualScores = emptyMap(), closeAndConsolidate = true),
         )
     }
 
-    private fun AttendanceStatus.toServerValue(): String = when (this) {
+    private fun AttendanceStatus.toServerValue(): String = when (AttendancePolicyStore.baseStatus(this)) {
         AttendanceStatus.PRESENT -> "present"
         AttendanceStatus.ABSENT -> "absent"
         AttendanceStatus.LATE -> "late"
         AttendanceStatus.JUSTIFIED -> "justified"
+        else -> "present"
+    }
+
+    private fun JustifiedEffect.toServerValue(): String = when (this) {
+        JustifiedEffect.PRESENT -> "present"
+        JustifiedEffect.LATE -> "late"
+        JustifiedEffect.ABSENT -> "absent"
+        JustifiedEffect.EXCLUDED -> "excluded"
     }
 }
 

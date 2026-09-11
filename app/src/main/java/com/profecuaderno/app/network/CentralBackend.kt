@@ -24,9 +24,7 @@ class AuthTokenStore(context: Context) {
             }.apply()
         }
 
-    fun clear() {
-        prefs.edit().clear().apply()
-    }
+    fun clear() { prefs.edit().clear().apply() }
 }
 
 data class LoginRequest(val email: String, val password: String)
@@ -63,12 +61,7 @@ data class ClassDto(
     val active: Boolean
 )
 
-data class CreateClassRequest(
-    val name: String,
-    val subject: String,
-    @SerializedName("period_name") val periodName: String
-)
-
+data class CreateClassRequest(val name: String, val subject: String, @SerializedName("period_name") val periodName: String)
 data class NoticeRequest(val title: String, val body: String)
 
 data class DirectorNoticeDto(
@@ -86,6 +79,23 @@ data class AttendanceRequest(
     val note: String? = null
 )
 
+data class AttendancePolicyRequest(
+    @SerializedName("late_per_absence") val latePerAbsence: Int,
+    @SerializedName("justified_effect") val justifiedEffect: String,
+)
+
+data class AttendancePolicyDto(
+    @SerializedName("class_id") val classId: Int,
+    @SerializedName("late_per_absence") val latePerAbsence: Int,
+    @SerializedName("justified_effect") val justifiedEffect: String,
+)
+
+data class AttendanceSessionRequest(
+    val date: String,
+    val title: String,
+    val worked: Boolean,
+)
+
 data class GradeRequest(
     @SerializedName("student_id") val studentId: Int,
     val category: String,
@@ -96,10 +106,7 @@ data class GradeRequest(
     val source: String = "teacher_app"
 )
 
-data class TeamDto(
-    val name: String,
-    @SerializedName("student_ids") val studentIds: List<Int>,
-)
+data class TeamDto(val name: String, @SerializedName("student_ids") val studentIds: List<Int>)
 
 data class TeamActivityRequest(
     val name: String,
@@ -137,84 +144,38 @@ data class ParticipationSummaryDto(
     @SerializedName("teacher_note") val teacherNote: String,
 )
 
-data class ParticipationReviewRequest(
-    val resolution: String,
-    val note: String = "",
-)
+data class ParticipationReviewRequest(val resolution: String, val note: String = "")
 
 interface TeacherCentralApi {
-    @GET("health")
-    suspend fun health(): Map<String, String>
-
-    @POST("auth/login")
-    suspend fun login(@Body request: LoginRequest): TokenResponse
-
-    @POST("auth/register")
-    suspend fun register(@Body request: RegisterRequest): TokenResponse
-
-    @GET("me")
-    suspend fun me(): UserDto
-
-    @GET("teacher-notices")
-    suspend fun teacherNotices(): List<DirectorNoticeDto>
-
-    @GET("classes")
-    suspend fun classes(): List<ClassDto>
-
-    @POST("classes")
-    suspend fun createClass(@Body request: CreateClassRequest): ClassDto
-
-    @GET("classes/{classId}/students")
-    suspend fun students(@Path("classId") classId: Int): List<UserDto>
-
-    @POST("classes/{classId}/notices")
-    suspend fun createNotice(@Path("classId") classId: Int, @Body request: NoticeRequest): Map<String, Any?>
-
-    @PUT("classes/{classId}/attendance")
-    suspend fun setAttendance(@Path("classId") classId: Int, @Body request: AttendanceRequest): Map<String, Any?>
-
-    @PUT("classes/{classId}/grades")
-    suspend fun setGrade(@Path("classId") classId: Int, @Body request: GradeRequest): Map<String, Any?>
-
-    @POST("classes/{classId}/team-activities")
-    suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): Map<String, Any?>
-
-    @GET("classes/{classId}/team-activities")
-    suspend fun teamActivities(@Path("classId") classId: Int): List<TeamActivityDto>
-
-    @GET("team-activities/{activityId}/participation-summary")
-    suspend fun participationSummary(@Path("activityId") activityId: Int): List<ParticipationSummaryDto>
-
-    @PUT("team-activities/{activityId}/participation-review/{studentId}")
-    suspend fun reviewParticipation(
-        @Path("activityId") activityId: Int,
-        @Path("studentId") studentId: Int,
-        @Body request: ParticipationReviewRequest,
-    ): Map<String, Any?>
-
-    @PUT("team-activities/{activityId}/scores")
-    suspend fun setTeamScores(@Path("activityId") activityId: Int, @Body request: TeamScoresRequest): Map<String, Any?>
+    @GET("health") suspend fun health(): Map<String, String>
+    @POST("auth/login") suspend fun login(@Body request: LoginRequest): TokenResponse
+    @POST("auth/register") suspend fun register(@Body request: RegisterRequest): TokenResponse
+    @GET("me") suspend fun me(): UserDto
+    @GET("teacher-notices") suspend fun teacherNotices(): List<DirectorNoticeDto>
+    @GET("classes") suspend fun classes(): List<ClassDto>
+    @POST("classes") suspend fun createClass(@Body request: CreateClassRequest): ClassDto
+    @GET("classes/{classId}/students") suspend fun students(@Path("classId") classId: Int): List<UserDto>
+    @POST("classes/{classId}/notices") suspend fun createNotice(@Path("classId") classId: Int, @Body request: NoticeRequest): Map<String, Any?>
+    @PUT("classes/{classId}/attendance") suspend fun setAttendance(@Path("classId") classId: Int, @Body request: AttendanceRequest): Map<String, Any?>
+    @GET("classes/{classId}/attendance-policy") suspend fun attendancePolicy(@Path("classId") classId: Int): AttendancePolicyDto
+    @PUT("classes/{classId}/attendance-policy") suspend fun setAttendancePolicy(@Path("classId") classId: Int, @Body request: AttendancePolicyRequest): AttendancePolicyDto
+    @PUT("classes/{classId}/attendance-session") suspend fun setAttendanceSession(@Path("classId") classId: Int, @Body request: AttendanceSessionRequest): Map<String, Any?>
+    @PUT("classes/{classId}/grades") suspend fun setGrade(@Path("classId") classId: Int, @Body request: GradeRequest): Map<String, Any?>
+    @POST("classes/{classId}/team-activities") suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): Map<String, Any?>
+    @GET("classes/{classId}/team-activities") suspend fun teamActivities(@Path("classId") classId: Int): List<TeamActivityDto>
+    @GET("team-activities/{activityId}/participation-summary") suspend fun participationSummary(@Path("activityId") activityId: Int): List<ParticipationSummaryDto>
+    @PUT("team-activities/{activityId}/participation-review/{studentId}") suspend fun reviewParticipation(@Path("activityId") activityId: Int, @Path("studentId") studentId: Int, @Body request: ParticipationReviewRequest): Map<String, Any?>
+    @PUT("team-activities/{activityId}/scores") suspend fun setTeamScores(@Path("activityId") activityId: Int, @Body request: TeamScoresRequest): Map<String, Any?>
 }
 
 class CentralBackend(context: Context) {
     val tokenStore = AuthTokenStore(context.applicationContext)
-
     private val authInterceptor = Interceptor { chain ->
         val token = tokenStore.accessToken
-        val request = if (token.isNullOrBlank()) {
-            chain.request()
-        } else {
-            chain.request().newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        }
+        val request = if (token.isNullOrBlank()) chain.request() else chain.request().newBuilder().header("Authorization", "Bearer $token").build()
         chain.proceed(request)
     }
-
-    private val client = OkHttpClient.Builder()
-        .addInterceptor(authInterceptor)
-        .build()
-
+    private val client = OkHttpClient.Builder().addInterceptor(authInterceptor).build()
     val api: TeacherCentralApi = Retrofit.Builder()
         .baseUrl(BuildConfig.API_BASE_URL)
         .client(client)
@@ -222,12 +183,7 @@ class CentralBackend(context: Context) {
         .build()
         .create(TeacherCentralApi::class.java)
 
-    val isConfigured: Boolean
-        get() = !BuildConfig.API_BASE_URL.contains("example.invalid")
-
-    fun saveSession(response: TokenResponse) {
-        tokenStore.accessToken = response.accessToken
-    }
-
+    val isConfigured: Boolean get() = !BuildConfig.API_BASE_URL.contains("example.invalid")
+    fun saveSession(response: TokenResponse) { tokenStore.accessToken = response.accessToken }
     fun signOut() = tokenStore.clear()
 }

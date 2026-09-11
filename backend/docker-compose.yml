@@ -1,6 +1,8 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     environment:
       DATABASE_URL: postgresql+psycopg://profe:profe@db:5432/profecuaderno
       JWT_SECRET: change-this-in-production

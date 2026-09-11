@@ -4,7 +4,7 @@ from collections import Counter
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -170,7 +170,11 @@ def current_institution(db: Session = Depends(get_db), user: User = Depends(curr
 def create_institution(payload: InstitutionIn, db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
     if user.institution_id:
         raise HTTPException(409, "Director already belongs to an institution")
-    institution = Institution(name=payload.name.strip(), created_by=user.id)
+    name = payload.name.strip()
+    duplicate = db.scalar(select(Institution).where(func.lower(Institution.name) == name.lower()))
+    if duplicate:
+        raise HTTPException(409, "Institution name already exists")
+    institution = Institution(name=name, created_by=user.id)
     db.add(institution); db.flush(); user.institution_id = institution.id; db.commit(); db.refresh(institution)
     return {"id": institution.id, "name": institution.name}
 
@@ -185,14 +189,16 @@ def attach_teacher(email: str = Query(...), db: Session = Depends(get_db), user:
     if teacher.institution_id and teacher.institution_id != user.institution_id:
         raise HTTPException(409, "Teacher already belongs to another institution")
 
-    teacher.institution_id = user.institution_id
     teacher_classes = db.scalars(select(SchoolClass).where(SchoolClass.teacher_id == teacher.id)).all()
+    if any(item.institution_id not in (None, user.institution_id) for item in teacher_classes):
+        raise HTTPException(409, "Teacher has classes assigned to another institution")
+
+    teacher.institution_id = user.institution_id
     class_ids = []
     for item in teacher_classes:
         if item.institution_id is None:
             item.institution_id = user.institution_id
-        if item.institution_id == user.institution_id:
-            class_ids.append(item.id)
+        class_ids.append(item.id)
 
     if class_ids:
         student_ids = db.scalars(select(ClassStudent.student_id).where(ClassStudent.class_id.in_(class_ids))).all()
@@ -200,6 +206,8 @@ def attach_teacher(email: str = Query(...), db: Session = Depends(get_db), user:
         for student in students:
             if student.institution_id is None:
                 student.institution_id = user.institution_id
+            elif student.institution_id != user.institution_id:
+                raise HTTPException(409, "An enrolled student belongs to another institution")
 
     db.commit(); db.refresh(teacher)
     return user_dict(teacher)
@@ -473,11 +481,33 @@ def create_schedule(payload: ScheduleIn, db: Session = Depends(get_db), user: Us
             raise HTTPException(400, "Class belongs to another teacher")
     if payload.end_time <= payload.start_time:
         raise HTTPException(400, "end_time must be after start_time")
-    conflicts = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id, ScheduleEntry.weekday == payload.weekday, ScheduleEntry.teacher_id == payload.teacher_id, ScheduleEntry.start_time < payload.end_time, ScheduleEntry.end_time > payload.start_time)).all()
-    if conflicts:
+    teacher_conflicts = db.scalars(select(ScheduleEntry).where(
+        ScheduleEntry.institution_id == user.institution_id,
+        ScheduleEntry.weekday == payload.weekday,
+        ScheduleEntry.teacher_id == payload.teacher_id,
+        ScheduleEntry.start_time < payload.end_time,
+        ScheduleEntry.end_time > payload.start_time,
+    )).all()
+    if teacher_conflicts:
         raise HTTPException(409, "Teacher schedule conflict")
+    if payload.class_id is not None:
+        class_conflicts = db.scalars(select(ScheduleEntry).where(
+            ScheduleEntry.institution_id == user.institution_id,
+            ScheduleEntry.weekday == payload.weekday,
+            ScheduleEntry.class_id == payload.class_id,
+            ScheduleEntry.start_time < payload.end_time,
+            ScheduleEntry.end_time > payload.start_time,
+        )).all()
+        if class_conflicts:
+            raise HTTPException(409, "Class schedule conflict")
     if payload.room:
-        room_conflicts = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id, ScheduleEntry.weekday == payload.weekday, ScheduleEntry.room == payload.room, ScheduleEntry.start_time < payload.end_time, ScheduleEntry.end_time > payload.start_time)).all()
+        room_conflicts = db.scalars(select(ScheduleEntry).where(
+            ScheduleEntry.institution_id == user.institution_id,
+            ScheduleEntry.weekday == payload.weekday,
+            ScheduleEntry.room == payload.room,
+            ScheduleEntry.start_time < payload.end_time,
+            ScheduleEntry.end_time > payload.start_time,
+        )).all()
         if room_conflicts:
             raise HTTPException(409, "Room schedule conflict")
     row = ScheduleEntry(institution_id=user.institution_id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row)
@@ -487,10 +517,21 @@ def create_schedule(payload: ScheduleIn, db: Session = Depends(get_db), user: Us
 @app.get("/schedule")
 def list_schedule(db: Session = Depends(get_db), user: User = Depends(current_user)):
     if user.role == Role.DIRECTOR:
-        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id)).all() if user.institution_id else []
+        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id).order_by(ScheduleEntry.weekday, ScheduleEntry.start_time)).all() if user.institution_id else []
     elif user.role == Role.TEACHER:
-        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.teacher_id == user.id)).all()
+        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.teacher_id == user.id).order_by(ScheduleEntry.weekday, ScheduleEntry.start_time)).all()
     else:
         class_ids = db.scalars(select(ClassStudent.class_id).where(ClassStudent.student_id == user.id)).all()
-        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.class_id.in_(class_ids))).all() if class_ids else []
+        rows = db.scalars(select(ScheduleEntry).where(ScheduleEntry.class_id.in_(class_ids)).order_by(ScheduleEntry.weekday, ScheduleEntry.start_time)).all() if class_ids else []
     return [{"id": x.id, "teacher_id": x.teacher_id, "class_id": x.class_id, "weekday": x.weekday, "start_time": x.start_time, "end_time": x.end_time, "room": x.room} for x in rows]
+
+
+@app.delete("/schedule/{schedule_id}")
+def delete_schedule(schedule_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
+    row = db.get(ScheduleEntry, schedule_id)
+    if not row:
+        raise HTTPException(404, "Schedule entry not found")
+    if not user.institution_id or row.institution_id != user.institution_id:
+        raise HTTPException(403, "Not allowed for this schedule entry")
+    db.delete(row); db.commit()
+    return {"detail": "Schedule entry deleted"}

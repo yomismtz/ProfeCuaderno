@@ -177,7 +177,7 @@ interface TeacherCentralApi {
     suspend fun setGrade(@Path("classId") classId: Int, @Body request: GradeRequest): Map<String, Any?>
 
     @POST("classes/{classId}/team-activities")
-    suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): TeamActivityDto
+    suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): Map<String, Any?>
 
     @GET("classes/{classId}/team-activities")
     suspend fun teamActivities(@Path("classId") classId: Int): List<TeamActivityDto>
@@ -193,7 +193,7 @@ interface TeacherCentralApi {
     ): Map<String, Any?>
 
     @PUT("team-activities/{activityId}/scores")
-    suspend fun setTeamScores(@Path("activityId") activityId: Int, @Body request: TeamScoresRequest): TeamActivityDto
+    suspend fun setTeamScores(@Path("activityId") activityId: Int, @Body request: TeamScoresRequest): Map<String, Any?>
 }
 
 class CentralBackend(context: Context) {

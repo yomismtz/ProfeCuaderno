@@ -128,6 +128,12 @@ def _session_map(db: Session, class_id: int) -> dict[str, AttendanceSessionMeta]
     return {row.date: row for row in rows}
 
 
+def _countable_rows(db: Session, class_id: int, rows: list[Attendance]) -> list[Attendance]:
+    """Keep legacy rows countable unless an explicit session metadata row marks the date suspended."""
+    metadata = _session_map(db, class_id)
+    return [row for row in rows if row.date not in metadata or metadata[row.date].worked]
+
+
 @router.get("/classes/{class_id}/attendance-policy")
 def get_attendance_policy(
     class_id: int,
@@ -227,7 +233,7 @@ def my_attendance_summary(
         .where(Attendance.class_id == class_id, Attendance.student_id == user.id)
         .order_by(Attendance.date.desc())
     ).all()
-    result = _summary(rows, _policy(db, class_id))
+    result = _summary(_countable_rows(db, class_id, rows), _policy(db, class_id))
     result["student_id"] = user.id
     return result
 
@@ -258,7 +264,7 @@ def student_attendance_records(
     policy = _policy(db, class_id)
     return {
         "student_id": student_id,
-        "summary": _summary(rows, policy),
+        "summary": _summary(_countable_rows(db, class_id, rows), policy),
         "records": [
             {
                 "id": row.id,
@@ -288,7 +294,7 @@ def class_attendance_summary(
         select(ClassStudent.student_id).where(ClassStudent.class_id == class_id)
     ).all()
     rows = db.scalars(select(Attendance).where(Attendance.class_id == class_id)).all()
-    overall = _summary(rows, policy)
+    overall = _summary(_countable_rows(db, class_id, rows), policy)
     overall.update({
         "class_id": class_id,
         "class_name": item.name,
@@ -319,7 +325,7 @@ def institution_attendance_summary(
         enrolled = db.scalar(
             select(func.count(ClassStudent.id)).where(ClassStudent.class_id == item.id)
         ) or 0
-        summary = _summary(rows, policy)
+        summary = _summary(_countable_rows(db, item.id, rows), policy)
         output.append({
             "class_id": item.id,
             "class_name": item.name,

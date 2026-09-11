@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .models import (
-    Attendance, ClassStudent, Grade, Institution, Notice, ParticipationReport,
-    ParticipationReview, Role, ScheduleEntry, SchoolClass, TeamActivity, User,
+    Attendance, ClassStudent, DirectorNotice, Grade, Institution, Notice,
+    ParticipationReport, ParticipationReview, Role, ScheduleEntry, SchoolClass,
+    TeamActivity, User,
 )
 from .schemas import (
     AttendanceIn, ClassIn, GradeIn, InstitutionIn, JoinClassIn, LoginIn, NoticeIn,
@@ -29,6 +30,10 @@ def class_dict(item: SchoolClass):
     return {"id": item.id, "name": item.name, "subject": item.subject, "period_name": item.period_name, "class_code": item.class_code, "teacher_id": item.teacher_id, "institution_id": item.institution_id, "active": item.active}
 
 
+def notice_dict(item: DirectorNotice):
+    return {"id": item.id, "title": item.title, "body": item.body, "created_at": item.created_at, "updated_at": item.updated_at}
+
+
 def get_class_or_404(db: Session, class_id: int) -> SchoolClass:
     item = db.get(SchoolClass, class_id)
     if not item:
@@ -37,8 +42,6 @@ def get_class_or_404(db: Session, class_id: int) -> SchoolClass:
 
 
 def teacher_owns(user: User, item: SchoolClass):
-    if user.role == Role.DIRECTOR and user.institution_id and user.institution_id == item.institution_id:
-        return
     if user.role != Role.TEACHER or item.teacher_id != user.id:
         raise HTTPException(403, "Not allowed for this class")
 
@@ -153,6 +156,16 @@ def me(user: User = Depends(current_user)):
     return user_dict(user)
 
 
+@app.get("/institution")
+def current_institution(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if not user.institution_id:
+        raise HTTPException(404, "User has no institution")
+    institution = db.get(Institution, user.institution_id)
+    if not institution:
+        raise HTTPException(404, "Institution not found")
+    return {"id": institution.id, "name": institution.name}
+
+
 @app.post("/institutions")
 def create_institution(payload: InstitutionIn, db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
     if user.institution_id:
@@ -169,8 +182,60 @@ def attach_teacher(email: str = Query(...), db: Session = Depends(get_db), user:
     teacher = db.scalar(select(User).where(User.email == email.lower(), User.role == Role.TEACHER))
     if not teacher:
         raise HTTPException(404, "Teacher not found")
-    teacher.institution_id = user.institution_id; db.commit()
+    if teacher.institution_id and teacher.institution_id != user.institution_id:
+        raise HTTPException(409, "Teacher already belongs to another institution")
+
+    teacher.institution_id = user.institution_id
+    teacher_classes = db.scalars(select(SchoolClass).where(SchoolClass.teacher_id == teacher.id)).all()
+    class_ids = []
+    for item in teacher_classes:
+        if item.institution_id is None:
+            item.institution_id = user.institution_id
+        if item.institution_id == user.institution_id:
+            class_ids.append(item.id)
+
+    if class_ids:
+        student_ids = db.scalars(select(ClassStudent.student_id).where(ClassStudent.class_id.in_(class_ids))).all()
+        students = db.scalars(select(User).where(User.id.in_(student_ids), User.role == Role.STUDENT)).all() if student_ids else []
+        for student in students:
+            if student.institution_id is None:
+                student.institution_id = user.institution_id
+
+    db.commit(); db.refresh(teacher)
     return user_dict(teacher)
+
+
+@app.get("/institutions/teachers")
+def institution_teachers(db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
+    if not user.institution_id:
+        return []
+    teachers = db.scalars(select(User).where(User.role == Role.TEACHER, User.institution_id == user.institution_id, User.active.is_(True)).order_by(User.full_name, User.email)).all()
+    return [user_dict(x) for x in teachers]
+
+
+@app.post("/institutions/notices")
+def create_director_notice(payload: NoticeIn, db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
+    if not user.institution_id:
+        raise HTTPException(400, "Director has no institution")
+    notice = DirectorNotice(institution_id=user.institution_id, author_id=user.id, title=payload.title.strip(), body=payload.body.strip())
+    db.add(notice); db.commit(); db.refresh(notice)
+    return notice_dict(notice)
+
+
+@app.get("/institutions/notices")
+def list_director_notices(db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
+    if not user.institution_id:
+        return []
+    rows = db.scalars(select(DirectorNotice).where(DirectorNotice.institution_id == user.institution_id).order_by(DirectorNotice.created_at.desc())).all()
+    return [notice_dict(x) for x in rows]
+
+
+@app.get("/teacher-notices")
+def list_teacher_notices(db: Session = Depends(get_db), user: User = Depends(require_roles("teacher"))):
+    if not user.institution_id:
+        return []
+    rows = db.scalars(select(DirectorNotice).where(DirectorNotice.institution_id == user.institution_id).order_by(DirectorNotice.created_at.desc())).all()
+    return [notice_dict(x) for x in rows]
 
 
 @app.post("/classes")
@@ -185,9 +250,15 @@ def join_class(payload: JoinClassIn, db: Session = Depends(get_db), user: User =
     item = db.scalar(select(SchoolClass).where(SchoolClass.class_code == payload.class_code.strip().upper(), SchoolClass.active.is_(True)))
     if not item:
         raise HTTPException(404, "Class code not found")
+    if item.institution_id:
+        if user.institution_id and user.institution_id != item.institution_id:
+            raise HTTPException(409, "Class belongs to another institution")
+        if user.institution_id is None:
+            user.institution_id = item.institution_id
     existing = db.scalar(select(ClassStudent).where(ClassStudent.class_id == item.id, ClassStudent.student_id == user.id))
     if not existing:
-        db.add(ClassStudent(class_id=item.id, student_id=user.id)); db.commit()
+        db.add(ClassStudent(class_id=item.id, student_id=user.id))
+    db.commit()
     return class_dict(item)
 
 
@@ -230,7 +301,8 @@ def list_notices(class_id: int, db: Session = Depends(get_db), user: User = Depe
 def set_attendance(class_id: int, payload: AttendanceIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = get_class_or_404(db, class_id); teacher_owns(user, item)
     member = db.scalar(select(ClassStudent).where(ClassStudent.class_id == class_id, ClassStudent.student_id == payload.student_id))
-    if not member: raise HTTPException(400, "Student is not enrolled")
+    if not member:
+        raise HTTPException(400, "Student is not enrolled")
     row = db.scalar(select(Attendance).where(Attendance.class_id == class_id, Attendance.student_id == payload.student_id, Attendance.date == payload.date))
     if row:
         row.status, row.note = payload.status, payload.note
@@ -250,6 +322,11 @@ def my_attendance(class_id: int, db: Session = Depends(get_db), user: User = Dep
 @app.put("/classes/{class_id}/grades")
 def set_grade(class_id: int, payload: GradeIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = get_class_or_404(db, class_id); teacher_owns(user, item)
+    member = db.scalar(select(ClassStudent).where(ClassStudent.class_id == class_id, ClassStudent.student_id == payload.student_id))
+    if not member:
+        raise HTTPException(400, "Student is not enrolled")
+    if payload.score > payload.max_score:
+        raise HTTPException(400, "Score cannot exceed max_score")
     row = db.scalar(select(Grade).where(Grade.class_id == class_id, Grade.student_id == payload.student_id, Grade.category == payload.category, Grade.activity_key == payload.activity_key))
     if row:
         row.activity_name, row.score, row.max_score, row.source = payload.activity_name, payload.score, payload.max_score, payload.source
@@ -271,12 +348,15 @@ def create_team_activity(class_id: int, payload: TeamActivityIn, db: Session = D
     item = get_class_or_404(db, class_id); teacher_owns(user, item)
     enrolled = set(db.scalars(select(ClassStudent.student_id).where(ClassStudent.class_id == class_id)).all())
     requested = [sid for team in payload.teams for sid in team.student_ids]
-    if len(requested) != len(set(requested)): raise HTTPException(400, "A student cannot appear in more than one team")
-    if not set(requested).issubset(enrolled): raise HTTPException(400, "All team members must be enrolled")
+    if len(requested) != len(set(requested)):
+        raise HTTPException(400, "A student cannot appear in more than one team")
+    if not set(requested).issubset(enrolled):
+        raise HTTPException(400, "All team members must be enrolled")
     existing = db.scalar(select(TeamActivity).where(TeamActivity.class_id == class_id, TeamActivity.activity_key == payload.activity_key))
     teams_json = [team.model_dump() for team in payload.teams]
     if existing:
-        if existing.closed: raise HTTPException(409, "Closed activity cannot be replaced")
+        if existing.closed:
+            raise HTTPException(409, "Closed activity cannot be replaced")
         existing.name, existing.activity_type, existing.category, existing.teams = payload.name, payload.activity_type, payload.category, teams_json
         activity = existing
     else:
@@ -287,6 +367,8 @@ def create_team_activity(class_id: int, payload: TeamActivityIn, db: Session = D
 
 @app.get("/classes/{class_id}/team-activities")
 def list_team_activities(class_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if user.role == Role.DIRECTOR:
+        raise HTTPException(403, "Directors cannot access student team details")
     item = get_class_or_404(db, class_id); class_access(db, user, item)
     rows = db.scalars(select(TeamActivity).where(TeamActivity.class_id == class_id).order_by(TeamActivity.created_at.desc())).all()
     result = []
@@ -303,13 +385,17 @@ def list_team_activities(class_id: int, db: Session = Depends(get_db), user: Use
 @app.put("/team-activities/{activity_id}/scores")
 def set_team_scores(activity_id: int, payload: TeamScoresIn, db: Session = Depends(get_db), user: User = Depends(require_roles("teacher"))):
     activity = db.get(TeamActivity, activity_id)
-    if not activity: raise HTTPException(404, "Activity not found")
+    if not activity:
+        raise HTTPException(404, "Activity not found")
     item = get_class_or_404(db, activity.class_id); teacher_owns(user, item)
     allowed_teams = {t.get("name", "") for t in activity.teams or []}
     allowed_students = {str(i) for t in activity.teams or [] for i in t.get("student_ids", [])}
-    if not set(payload.base_scores).issubset(allowed_teams): raise HTTPException(400, "Unknown team")
-    if not set(payload.individual_scores).issubset(allowed_students): raise HTTPException(400, "Unknown team member")
-    if any(v < 0 or v > 100 for v in list(payload.base_scores.values()) + list(payload.individual_scores.values())): raise HTTPException(400, "Scores must be 0..100")
+    if not set(payload.base_scores).issubset(allowed_teams):
+        raise HTTPException(400, "Unknown team")
+    if not set(payload.individual_scores).issubset(allowed_students):
+        raise HTTPException(400, "Unknown team member")
+    if any(v < 0 or v > 100 for v in list(payload.base_scores.values()) + list(payload.individual_scores.values())):
+        raise HTTPException(400, "Scores must be 0..100")
     activity.base_scores = payload.base_scores; activity.individual_scores = payload.individual_scores
     if payload.close_and_consolidate:
         consolidate_team_scores(db, activity); activity.closed = True
@@ -320,11 +406,15 @@ def set_team_scores(activity_id: int, payload: TeamScoresIn, db: Session = Depen
 @app.post("/team-activities/{activity_id}/participation-reports")
 def report_participation(activity_id: int, payload: ParticipationReportIn, db: Session = Depends(get_db), user: User = Depends(require_roles("student"))):
     activity = db.get(TeamActivity, activity_id)
-    if not activity: raise HTTPException(404, "Activity not found")
-    if activity.closed: raise HTTPException(409, "Activity is closed")
+    if not activity:
+        raise HTTPException(404, "Activity not found")
+    if activity.closed:
+        raise HTTPException(409, "Activity is closed")
     student_member(db, user, activity.class_id)
-    if payload.target_student_id == user.id: raise HTTPException(400, "You cannot report yourself")
-    if not same_team(activity, user.id, payload.target_student_id): raise HTTPException(403, "You can only report a member of your own team")
+    if payload.target_student_id == user.id:
+        raise HTTPException(400, "You cannot report yourself")
+    if not same_team(activity, user.id, payload.target_student_id):
+        raise HTTPException(403, "You can only report a member of your own team")
     row = db.scalar(select(ParticipationReport).where(ParticipationReport.activity_id == activity_id, ParticipationReport.reporter_id == user.id, ParticipationReport.target_student_id == payload.target_student_id))
     if row:
         row.severity, row.comment = payload.severity, payload.comment.strip()
@@ -337,12 +427,14 @@ def report_participation(activity_id: int, payload: ParticipationReportIn, db: S
 @app.get("/team-activities/{activity_id}/participation-summary")
 def participation_summary(activity_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     activity = db.get(TeamActivity, activity_id)
-    if not activity: raise HTTPException(404, "Activity not found")
+    if not activity:
+        raise HTTPException(404, "Activity not found")
     item = get_class_or_404(db, activity.class_id); teacher_owns(user, item)
     reports = db.scalars(select(ParticipationReport).where(ParticipationReport.activity_id == activity_id)).all()
     reviews = {r.student_id: r for r in db.scalars(select(ParticipationReview).where(ParticipationReview.activity_id == activity_id)).all()}
     by_target: dict[int, list[ParticipationReport]] = {}
-    for report in reports: by_target.setdefault(report.target_student_id, []).append(report)
+    for report in reports:
+        by_target.setdefault(report.target_student_id, []).append(report)
     out = []
     for student_id, rows in by_target.items():
         counts = Counter(r.severity for r in rows)
@@ -354,7 +446,8 @@ def participation_summary(activity_id: int, db: Session = Depends(get_db), user:
 @app.put("/team-activities/{activity_id}/participation-review/{student_id}")
 def review_participation(activity_id: int, student_id: int, payload: ParticipationReviewIn, db: Session = Depends(get_db), user: User = Depends(require_roles("teacher"))):
     activity = db.get(TeamActivity, activity_id)
-    if not activity: raise HTTPException(404, "Activity not found")
+    if not activity:
+        raise HTTPException(404, "Activity not found")
     item = get_class_or_404(db, activity.class_id); teacher_owns(user, item)
     row = db.scalar(select(ParticipationReview).where(ParticipationReview.activity_id == activity_id, ParticipationReview.student_id == student_id))
     if row:
@@ -367,15 +460,26 @@ def review_participation(activity_id: int, student_id: int, payload: Participati
 
 @app.post("/schedule")
 def create_schedule(payload: ScheduleIn, db: Session = Depends(get_db), user: User = Depends(require_roles("director"))):
-    if not user.institution_id: raise HTTPException(400, "Director has no institution")
+    if not user.institution_id:
+        raise HTTPException(400, "Director has no institution")
     teacher = db.get(User, payload.teacher_id)
-    if not teacher or teacher.role != Role.TEACHER or teacher.institution_id != user.institution_id: raise HTTPException(400, "Teacher is not in your institution")
-    if payload.end_time <= payload.start_time: raise HTTPException(400, "end_time must be after start_time")
+    if not teacher or teacher.role != Role.TEACHER or teacher.institution_id != user.institution_id:
+        raise HTTPException(400, "Teacher is not in your institution")
+    if payload.class_id is not None:
+        classroom = get_class_or_404(db, payload.class_id)
+        if classroom.institution_id != user.institution_id:
+            raise HTTPException(400, "Class is not in your institution")
+        if classroom.teacher_id != payload.teacher_id:
+            raise HTTPException(400, "Class belongs to another teacher")
+    if payload.end_time <= payload.start_time:
+        raise HTTPException(400, "end_time must be after start_time")
     conflicts = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id, ScheduleEntry.weekday == payload.weekday, ScheduleEntry.teacher_id == payload.teacher_id, ScheduleEntry.start_time < payload.end_time, ScheduleEntry.end_time > payload.start_time)).all()
-    if conflicts: raise HTTPException(409, "Teacher schedule conflict")
+    if conflicts:
+        raise HTTPException(409, "Teacher schedule conflict")
     if payload.room:
         room_conflicts = db.scalars(select(ScheduleEntry).where(ScheduleEntry.institution_id == user.institution_id, ScheduleEntry.weekday == payload.weekday, ScheduleEntry.room == payload.room, ScheduleEntry.start_time < payload.end_time, ScheduleEntry.end_time > payload.start_time)).all()
-        if room_conflicts: raise HTTPException(409, "Room schedule conflict")
+        if room_conflicts:
+            raise HTTPException(409, "Room schedule conflict")
     row = ScheduleEntry(institution_id=user.institution_id, **payload.model_dump()); db.add(row); db.commit(); db.refresh(row)
     return {"id": row.id, **payload.model_dump()}
 

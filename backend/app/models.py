@@ -92,6 +92,25 @@ class Attendance(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class AttendancePolicy(Base):
+    __tablename__ = "attendance_policies"
+    class_id: Mapped[int] = mapped_column(ForeignKey("classes.id"), primary_key=True)
+    late_per_absence: Mapped[int] = mapped_column(Integer, default=3)
+    justified_effect: Mapped[str] = mapped_column(String(20), default="present")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AttendanceSessionMeta(Base):
+    __tablename__ = "attendance_session_meta"
+    __table_args__ = (UniqueConstraint("class_id", "date"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    class_id: Mapped[int] = mapped_column(ForeignKey("classes.id"), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    title: Mapped[str] = mapped_column(String(160), default="Clase")
+    worked: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class Grade(Base):
     __tablename__ = "grades"
     __table_args__ = (UniqueConstraint("class_id", "student_id", "category", "activity_key"),)

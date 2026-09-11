@@ -117,7 +117,7 @@ class TeacherOnlineSync(
         AttendanceStatus.PRESENT -> "present"
         AttendanceStatus.ABSENT -> "absent"
         AttendanceStatus.LATE -> "late"
-        AttendanceStatus.JUSTIFIED -> "excused"
+        AttendanceStatus.JUSTIFIED -> "justified"
     }
 }
 

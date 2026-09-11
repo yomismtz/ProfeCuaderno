@@ -4,19 +4,21 @@ import android.content.Context
 import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.AttendanceStatus
 import com.profecuaderno.app.data.EvaluationMode
+import com.profecuaderno.app.data.TeamFormationStore
 import com.profecuaderno.app.data.TeacherDbHelper
 
 /**
  * Puente explícito entre el cuaderno local del docente y el backend central.
  * Los alumnos se relacionan únicamente por correo electrónico exacto para evitar
- * asignar asistencia o calificaciones a una persona equivocada.
+ * asignar asistencia, calificaciones o equipos a una persona equivocada.
  */
 class TeacherOnlineSync(
     context: Context,
     private val backend: CentralBackend,
     private val db: TeacherDbHelper,
 ) {
-    private val prefs = context.applicationContext.getSharedPreferences("central_class_links", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences("central_class_links", Context.MODE_PRIVATE)
 
     suspend fun ensureClass(period: AcademicPeriod): ClassDto {
         val classes = backend.api.classes()
@@ -113,6 +115,98 @@ class TeacherOnlineSync(
         )
     }
 
+    suspend fun publishTeamFormations(period: AcademicPeriod): TeamPublishSummary {
+        val classroom = ensureClass(period)
+        val onlineStudents = backend.api.students(classroom.id)
+        val onlineByEmail = onlineStudents.associateBy { it.email.trim().lowercase() }
+        val localStudents = db.getStudents(period.id)
+        val localById = localStudents.associateBy { it.id }
+        val onlineIdByLocalId = localStudents.mapNotNull { local ->
+            val email = local.email.trim().lowercase()
+            val online = email.takeIf { it.isNotBlank() }?.let(onlineByEmail::get) ?: return@mapNotNull null
+            local.id to online.id
+        }.toMap()
+        val formations = TeamFormationStore.load(appContext, period.id)
+
+        var published = 0
+        var failed = 0
+        val skipped = mutableListOf<String>()
+
+        formations.forEach { formation ->
+            val allIds = formation.teams.flatMap { it.studentIds }.distinct()
+            val missingIds = allIds.filterNot(onlineIdByLocalId::containsKey)
+            if (missingIds.isNotEmpty()) {
+                val names = missingIds.mapNotNull { localById[it]?.name }.ifEmpty { listOf("alumnos sin cuenta vinculada") }
+                skipped += "${formation.activityName.ifBlank { formation.activityType }}: ${names.joinToString()}"
+                return@forEach
+            }
+
+            val teams = formation.teams.map { team ->
+                TeamDto(
+                    name = team.name.take(100).ifBlank { "Equipo" },
+                    studentIds = team.studentIds.mapNotNull(onlineIdByLocalId::get),
+                )
+            }.filter { it.studentIds.isNotEmpty() }
+
+            if (teams.isEmpty()) {
+                skipped += "${formation.activityName.ifBlank { formation.activityType }}: sin integrantes"
+                return@forEach
+            }
+
+            val activityName = formation.activityName.trim().ifBlank { formation.activityType.trim().ifBlank { "Actividad en equipo" } }.take(200)
+            val activityType = formation.activityType.trim().ifBlank { "Trabajo en equipo" }.take(80)
+            val category = activityType.take(120)
+            val request = TeamActivityRequest(
+                name = activityName,
+                activityType = activityType,
+                category = category,
+                activityKey = "team-${formation.id}".take(160),
+                teams = teams,
+            )
+            runCatching { backend.api.createTeamActivity(classroom.id, request) }
+                .onSuccess { published++ }
+                .onFailure {
+                    failed++
+                    skipped += "$activityName: ${it.message ?: "error de servidor"}"
+                }
+        }
+
+        return TeamPublishSummary(
+            classroom = classroom,
+            localFormations = formations.size,
+            published = published,
+            failed = failed,
+            skipped = skipped,
+        )
+    }
+
+    suspend fun teamActivities(period: AcademicPeriod): Pair<ClassDto, List<TeamActivityDto>> {
+        val classroom = ensureClass(period)
+        return classroom to backend.api.teamActivities(classroom.id)
+    }
+
+    suspend fun participationSummary(activityId: Int): List<ParticipationSummaryDto> =
+        backend.api.participationSummary(activityId)
+
+    suspend fun reviewParticipation(activityId: Int, studentId: Int, resolution: String, note: String = "") {
+        backend.api.reviewParticipation(
+            activityId = activityId,
+            studentId = studentId,
+            request = ParticipationReviewRequest(resolution = resolution, note = note.take(500)),
+        )
+    }
+
+    suspend fun closeTeamActivity(activityId: Int) {
+        backend.api.setTeamScores(
+            activityId,
+            TeamScoresRequest(
+                baseScores = emptyMap(),
+                individualScores = emptyMap(),
+                closeAndConsolidate = true,
+            ),
+        )
+    }
+
     private fun AttendanceStatus.toServerValue(): String = when (this) {
         AttendanceStatus.PRESENT -> "present"
         AttendanceStatus.ABSENT -> "absent"
@@ -129,4 +223,12 @@ data class TeacherSyncSummary(
     val gradesSent: Int,
     val failedWrites: Int,
     val unmatchedStudents: List<String>,
+)
+
+data class TeamPublishSummary(
+    val classroom: ClassDto,
+    val localFormations: Int,
+    val published: Int,
+    val failed: Int,
+    val skipped: List<String>,
 )

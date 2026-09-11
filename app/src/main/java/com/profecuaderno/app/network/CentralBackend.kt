@@ -71,6 +71,14 @@ data class CreateClassRequest(
 
 data class NoticeRequest(val title: String, val body: String)
 
+data class DirectorNoticeDto(
+    val id: Int,
+    val title: String,
+    val body: String,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null,
+)
+
 data class AttendanceRequest(
     @SerializedName("student_id") val studentId: Int,
     val date: String,
@@ -100,6 +108,9 @@ interface TeacherCentralApi {
 
     @GET("me")
     suspend fun me(): UserDto
+
+    @GET("teacher-notices")
+    suspend fun teacherNotices(): List<DirectorNoticeDto>
 
     @GET("classes")
     suspend fun classes(): List<ClassDto>

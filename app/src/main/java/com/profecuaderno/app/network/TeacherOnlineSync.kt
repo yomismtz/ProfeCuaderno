@@ -5,9 +5,12 @@ import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.AttendancePolicyStore
 import com.profecuaderno.app.data.AttendanceStatus
 import com.profecuaderno.app.data.EvaluationMode
+import com.profecuaderno.app.data.EvaluationSetupStore
 import com.profecuaderno.app.data.JustifiedEffect
 import com.profecuaderno.app.data.TeamFormationStore
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.data.WeightedEvaluationKind
+import com.profecuaderno.app.data.WeightedEvaluationStore
 
 /**
  * Puente explícito entre el cuaderno local del docente y el backend central.
@@ -57,7 +60,8 @@ class TeacherOnlineSync(
         val localStudents = db.getStudents(period.id)
         val allSessions = db.listAttendanceSessions(period.id)
         val workedSessions = allSessions.filter { it.worked }
-        val categories = db.getCategories(period.id).filter { db.effectiveEvaluationMode(it) != EvaluationMode.ATTENDANCE }
+        val categories = db.getCategories(period.id)
+        val evaluationFinalized = EvaluationSetupStore.isFinalized(db, period.id)
 
         var matched = 0
         var attendanceSent = 0
@@ -89,6 +93,28 @@ class TeacherOnlineSync(
             }.onFailure { failedWrites++ }
         }
 
+        // Un esquema en borrador no reemplaza lo que el alumno ya ve. Solo se
+        // publica al servidor después de que el docente lo finaliza nuevamente.
+        if (evaluationFinalized) {
+            runCatching {
+                backend.api.setEvaluationPlan(
+                    classroom.id,
+                    EvaluationPlanRequest(
+                        finalized = true,
+                        categories = categories.map { category ->
+                            EvaluationPlanCategoryRequest(
+                                categoryKey = "category-${category.id}",
+                                name = category.name,
+                                weight = category.weight,
+                                mode = category.toServerEvaluationMode(),
+                                position = category.position,
+                            )
+                        },
+                    ),
+                )
+            }.onFailure { failedWrites++ }
+        }
+
         localStudents.forEach localLoop@ { local ->
             val email = local.email.trim().lowercase()
             val online = email.takeIf { it.isNotBlank() }?.let(byEmail::get)
@@ -110,19 +136,27 @@ class TeacherOnlineSync(
                     .onFailure { failedWrites++ }
             }
 
-            categories.forEach categoryLoop@ { category ->
-                val score = db.categoryScoreOrNull(period.id, local.id, category) ?: return@categoryLoop
-                val request = GradeRequest(
-                    studentId = online.id,
-                    category = category.name,
-                    activityKey = "category-${category.id}",
-                    activityName = category.name,
-                    score = score,
-                    maxScore = 100.0,
-                )
-                runCatching { backend.api.setGrade(classroom.id, request) }
-                    .onSuccess { gradesSent++ }
-                    .onFailure { failedWrites++ }
+            if (evaluationFinalized) {
+                categories.forEach { category ->
+                    val activityKey = "category-${category.id}"
+                    val score = db.categoryScoreOrNull(period.id, local.id, category)
+                    if (score == null) {
+                        runCatching { backend.api.deleteGrade(classroom.id, online.id, activityKey) }
+                            .onFailure { failedWrites++ }
+                    } else {
+                        val request = GradeRequest(
+                            studentId = online.id,
+                            category = category.name,
+                            activityKey = activityKey,
+                            activityName = category.name,
+                            score = score,
+                            maxScore = 100.0,
+                        )
+                        runCatching { backend.api.setGrade(classroom.id, request) }
+                            .onSuccess { gradesSent++ }
+                            .onFailure { failedWrites++ }
+                    }
+                }
             }
         }
 
@@ -237,6 +271,19 @@ class TeacherOnlineSync(
         JustifiedEffect.LATE -> "late"
         JustifiedEffect.ABSENT -> "absent"
         JustifiedEffect.EXCLUDED -> "excluded"
+    }
+
+    private fun com.profecuaderno.app.data.EvaluationCategory.toServerEvaluationMode(): String {
+        return when (WeightedEvaluationStore.kindFor(db, this)) {
+            WeightedEvaluationKind.EXAMS -> "exams"
+            WeightedEvaluationKind.ACTIVITIES -> "activities"
+            null -> when (db.effectiveEvaluationMode(this)) {
+                EvaluationMode.RUBRIC -> "rubric"
+                EvaluationMode.ATTENDANCE -> "attendance"
+                EvaluationMode.AVERAGE -> "activities"
+                EvaluationMode.DIRECT -> "direct"
+            }
+        }
     }
 }
 

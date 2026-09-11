@@ -2,9 +2,11 @@ from fastapi.responses import HTMLResponse
 
 from .main import app
 from .attendance_routes import router as attendance_router
+from .evaluation_routes import router as evaluation_router
 from .site import homepage, privacy_policy
 
 app.include_router(attendance_router)
+app.include_router(evaluation_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

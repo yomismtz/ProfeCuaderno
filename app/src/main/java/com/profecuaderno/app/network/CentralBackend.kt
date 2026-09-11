@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -106,6 +107,33 @@ data class GradeRequest(
     val source: String = "teacher_app"
 )
 
+data class EvaluationPlanCategoryRequest(
+    @SerializedName("category_key") val categoryKey: String,
+    val name: String,
+    val weight: Double,
+    val mode: String,
+    val position: Int,
+)
+
+data class EvaluationPlanRequest(
+    val finalized: Boolean,
+    val categories: List<EvaluationPlanCategoryRequest>,
+)
+
+data class EvaluationPlanCategoryDto(
+    @SerializedName("category_key") val categoryKey: String,
+    val name: String,
+    val weight: Double,
+    val mode: String,
+    val position: Int,
+)
+
+data class EvaluationPlanDto(
+    @SerializedName("class_id") val classId: Int,
+    val finalized: Boolean,
+    val categories: List<EvaluationPlanCategoryDto>,
+)
+
 data class TeamDto(val name: String, @SerializedName("student_ids") val studentIds: List<Int>)
 
 data class TeamActivityRequest(
@@ -160,7 +188,13 @@ interface TeacherCentralApi {
     @GET("classes/{classId}/attendance-policy") suspend fun attendancePolicy(@Path("classId") classId: Int): AttendancePolicyDto
     @PUT("classes/{classId}/attendance-policy") suspend fun setAttendancePolicy(@Path("classId") classId: Int, @Body request: AttendancePolicyRequest): AttendancePolicyDto
     @PUT("classes/{classId}/attendance-session") suspend fun setAttendanceSession(@Path("classId") classId: Int, @Body request: AttendanceSessionRequest): Map<String, Any?>
+    @PUT("classes/{classId}/evaluation-plan") suspend fun setEvaluationPlan(@Path("classId") classId: Int, @Body request: EvaluationPlanRequest): EvaluationPlanDto
     @PUT("classes/{classId}/grades") suspend fun setGrade(@Path("classId") classId: Int, @Body request: GradeRequest): Map<String, Any?>
+    @DELETE("classes/{classId}/grades/{studentId}/{activityKey}") suspend fun deleteGrade(
+        @Path("classId") classId: Int,
+        @Path("studentId") studentId: Int,
+        @Path("activityKey") activityKey: String,
+    ): Map<String, Any?>
     @POST("classes/{classId}/team-activities") suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): Map<String, Any?>
     @GET("classes/{classId}/team-activities") suspend fun teamActivities(@Path("classId") classId: Int): List<TeamActivityDto>
     @GET("team-activities/{activityId}/participation-summary") suspend fun participationSummary(@Path("activityId") activityId: Int): List<ParticipationSummaryDto>

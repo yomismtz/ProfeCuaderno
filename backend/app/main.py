@@ -383,7 +383,18 @@ def list_team_activities(class_id: int, db: Session = Depends(get_db), user: Use
     for x in rows:
         data = {"id": x.id, "name": x.name, "activity_type": x.activity_type, "category": x.category, "activity_key": x.activity_key, "closed": x.closed}
         if user.role == Role.STUDENT:
-            data["team"] = next((t for t in (x.teams or []) if user.id in [int(i) for i in t.get("student_ids", [])]), None)
+            team = next((t for t in (x.teams or []) if user.id in [int(i) for i in t.get("student_ids", [])]), None)
+            data["team"] = team
+            if team:
+                member_ids = [int(i) for i in team.get("student_ids", [])]
+                members = db.scalars(select(User).where(User.id.in_(member_ids), User.role == Role.STUDENT)).all() if member_ids else []
+                by_id = {member.id: member for member in members}
+                data["team_members"] = [
+                    {"id": member_id, "full_name": by_id[member_id].full_name}
+                    for member_id in member_ids if member_id in by_id
+                ]
+            else:
+                data["team_members"] = []
         else:
             data["teams"] = x.teams; data["base_scores"] = x.base_scores; data["individual_scores"] = x.individual_scores
         result.append(data)

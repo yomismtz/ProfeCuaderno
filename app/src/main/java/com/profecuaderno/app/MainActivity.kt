@@ -40,6 +40,7 @@ class MainActivity : FragmentActivity() {
                     LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
                     var refresh by remember { mutableIntStateOf(0) }
                     val teacher = remember(refresh) { db.getTeacher() }
+                    val period = remember(refresh) { db.getActivePeriod() }
                     var unlocked by remember { mutableStateOf(!AppSecurityManager.isLockEnabled(context)) }
                     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -57,7 +58,15 @@ class MainActivity : FragmentActivity() {
                             !onlineSession -> OnlineAuthScreen(backend = backend, onAuthenticated = { onlineSession = true })
                             !unlocked && AppSecurityManager.isLockEnabled(context) -> AppLockScreen(onUnlocked = { unlocked = true })
                             teacher == null -> TeacherSetupScreen(onSave = { db.saveTeacher(it); refresh++ })
-                            else -> ProfeCuadernoApp(db = db, onDataChanged = { refresh++ }, globalRefresh = refresh, currentTheme = activeTheme, onThemeChanged = { saveTheme(it) })
+                            else -> TeacherOnlineHost(db = db, period = period, backend = backend) {
+                                ProfeCuadernoApp(
+                                    db = db,
+                                    onDataChanged = { refresh++ },
+                                    globalRefresh = refresh,
+                                    currentTheme = activeTheme,
+                                    onThemeChanged = { saveTheme(it) },
+                                )
+                            }
                         }
                     }
                 }

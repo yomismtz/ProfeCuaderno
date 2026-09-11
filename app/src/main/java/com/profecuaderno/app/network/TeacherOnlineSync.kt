@@ -65,17 +65,17 @@ class TeacherOnlineSync(
         var failedWrites = 0
         val unmatched = mutableListOf<String>()
 
-        localStudents.forEach { local ->
+        localStudents.forEach localLoop@ { local ->
             val email = local.email.trim().lowercase()
             val online = email.takeIf { it.isNotBlank() }?.let(byEmail::get)
             if (online == null) {
                 unmatched += if (local.email.isBlank()) "${local.name} (sin correo)" else "${local.name} (${local.email})"
-                return@forEach
+                return@localLoop
             }
             matched++
 
-            sessions.forEach { session ->
-                val status = db.getAttendanceStatus(session.id, local.id) ?: return@forEach
+            sessions.forEach sessionLoop@ { session ->
+                val status = db.getAttendanceStatus(session.id, local.id) ?: return@sessionLoop
                 val request = AttendanceRequest(
                     studentId = online.id,
                     date = session.date,
@@ -86,8 +86,8 @@ class TeacherOnlineSync(
                     .onFailure { failedWrites++ }
             }
 
-            categories.forEach { category ->
-                val score = db.categoryScoreOrNull(period.id, local.id, category) ?: return@forEach
+            categories.forEach categoryLoop@ { category ->
+                val score = db.categoryScoreOrNull(period.id, local.id, category) ?: return@categoryLoop
                 val request = GradeRequest(
                     studentId = online.id,
                     category = category.name,

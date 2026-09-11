@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -23,6 +24,9 @@ import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.network.CentralBackend
 import com.profecuaderno.app.network.ClassDto
 import com.profecuaderno.app.network.DirectorNoticeDto
+import com.profecuaderno.app.network.ParticipationSummaryDto
+import com.profecuaderno.app.network.TeamActivityDto
+import com.profecuaderno.app.network.TeamPublishSummary
 import com.profecuaderno.app.network.TeacherOnlineSync
 import com.profecuaderno.app.network.TeacherSyncSummary
 import com.profecuaderno.app.network.UserDto
@@ -65,6 +69,14 @@ fun TeacherOnlineHost(
     }
 }
 
+private data class OnlineClassroomSnapshot(
+    val classroom: ClassDto,
+    val students: List<UserDto>,
+    val directorNotices: List<DirectorNoticeDto>,
+    val teamActivities: List<TeamActivityDto>,
+    val participation: Map<Int, List<ParticipationSummaryDto>>,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OnlineClassroomScreen(
@@ -79,11 +91,14 @@ private fun OnlineClassroomScreen(
     var classroom by remember { mutableStateOf<ClassDto?>(null) }
     var onlineStudents by remember { mutableStateOf<List<UserDto>>(emptyList()) }
     var directorNotices by remember { mutableStateOf<List<DirectorNoticeDto>>(emptyList()) }
+    var teamActivities by remember { mutableStateOf<List<TeamActivityDto>>(emptyList()) }
+    var participationByActivity by remember { mutableStateOf<Map<Int, List<ParticipationSummaryDto>>>(emptyMap()) }
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Conectando con el servidor…") }
     var noticeTitle by remember { mutableStateOf("") }
     var noticeBody by remember { mutableStateOf("") }
     var summary by remember { mutableStateOf<TeacherSyncSummary?>(null) }
+    var teamPublishSummary by remember { mutableStateOf<TeamPublishSummary?>(null) }
 
     fun refresh() {
         scope.launch {
@@ -91,11 +106,17 @@ private fun OnlineClassroomScreen(
             runCatching {
                 val (serverClass, students) = sync.students(period)
                 val institutionalNotices = runCatching { backend.api.teacherNotices() }.getOrDefault(emptyList())
-                Triple(serverClass, students, institutionalNotices)
-            }.onSuccess { (serverClass, students, institutionalNotices) ->
-                classroom = serverClass
-                onlineStudents = students
-                directorNotices = institutionalNotices
+                val (_, activities) = sync.teamActivities(period)
+                val participation = activities.associate { activity ->
+                    activity.id to runCatching { sync.participationSummary(activity.id) }.getOrDefault(emptyList())
+                }
+                OnlineClassroomSnapshot(serverClass, students, institutionalNotices, activities, participation)
+            }.onSuccess { snapshot ->
+                classroom = snapshot.classroom
+                onlineStudents = snapshot.students
+                directorNotices = snapshot.directorNotices
+                teamActivities = snapshot.teamActivities
+                participationByActivity = snapshot.participation
                 status = "Grupo online conectado"
             }.onFailure { status = it.message ?: "No se pudo conectar con el grupo online" }
             loading = false
@@ -251,6 +272,167 @@ private fun OnlineClassroomScreen(
             }
 
             item {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Groups, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Equipos y coevaluación", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Text("Publica los equipos que ya creaste en la app. Un equipo solo se envía si todos sus integrantes tienen una cuenta online vinculada por correo exacto.")
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    loading = true
+                                    runCatching { sync.publishTeamFormations(period) }
+                                        .onSuccess {
+                                            teamPublishSummary = it
+                                            status = "Equipos procesados"
+                                            refresh()
+                                        }
+                                        .onFailure { status = it.message ?: "No se pudieron publicar los equipos" }
+                                    loading = false
+                                }
+                            },
+                            enabled = !loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Publicar equipos locales")
+                        }
+                        teamPublishSummary?.let { result ->
+                            Text("Formaciones locales: ${result.localFormations} · Publicadas/actualizadas: ${result.published}")
+                            if (result.failed > 0) Text("Con error: ${result.failed}", color = MaterialTheme.colorScheme.error)
+                            result.skipped.take(6).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                            if (result.skipped.size > 6) Text("• …y ${result.skipped.size - 6} más", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text("Actividades de equipo online (${teamActivities.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            if (teamActivities.isEmpty()) {
+                item { Text("Todavía no hay actividades de equipo publicadas para este grupo.") }
+            } else {
+                items(teamActivities, key = { "team-activity-${it.id}" }) { activity ->
+                    val reports = participationByActivity[activity.id].orEmpty()
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(activity.name, fontWeight = FontWeight.Bold)
+                                    Text("${activity.activityType} · ${activity.teams?.size ?: 0} equipos", style = MaterialTheme.typography.bodySmall)
+                                }
+                                AssistChip(
+                                    onClick = {},
+                                    enabled = false,
+                                    label = { Text(if (activity.closed) "Cerrada" else "Abierta") },
+                                )
+                            }
+
+                            if (reports.isEmpty()) {
+                                Text("Sin reportes anónimos pendientes de revisión.", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                reports.forEach { report ->
+                                    val studentName = onlineStudents.firstOrNull { it.id == report.studentId }?.fullName ?: "Alumno ${report.studentId}"
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(studentName, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Reportes: ${report.reportCount} · Participación parcial: ${report.partial} · No trabajó: ${report.didNotWork}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                        if (report.requiresCorroboration) {
+                                            Text("Un solo reporte: requiere corroboración antes de ajustar una nota.", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        report.resolution?.let {
+                                            Text("Resolución: ${resolutionLabel(it)}", color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        if (!activity.closed) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            loading = true
+                                                            runCatching { sync.reviewParticipation(activity.id, report.studentId, "confirmed") }
+                                                                .onSuccess { refresh() }
+                                                                .onFailure { status = it.message ?: "No se pudo guardar la revisión" }
+                                                            loading = false
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("Confirmar") }
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            loading = true
+                                                            runCatching { sync.reviewParticipation(activity.id, report.studentId, "not_confirmed") }
+                                                                .onSuccess { refresh() }
+                                                                .onFailure { status = it.message ?: "No se pudo guardar la revisión" }
+                                                            loading = false
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("No confirmar") }
+                                            }
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            loading = true
+                                                            runCatching { sync.reviewParticipation(activity.id, report.studentId, "partial") }
+                                                                .onSuccess { refresh() }
+                                                                .onFailure { status = it.message ?: "No se pudo guardar la revisión" }
+                                                            loading = false
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("Parcial") }
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            loading = true
+                                                            runCatching { sync.reviewParticipation(activity.id, report.studentId, "insufficient_evidence") }
+                                                                .onSuccess { refresh() }
+                                                                .onFailure { status = it.message ?: "No se pudo guardar la revisión" }
+                                                            loading = false
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("Sin evidencia") }
+                                            }
+                                        }
+                                    }
+                                    HorizontalDivider()
+                                }
+                            }
+
+                            if (!activity.closed) {
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            loading = true
+                                            runCatching { sync.closeTeamActivity(activity.id) }
+                                                .onSuccess {
+                                                    status = "Actividad cerrada; ya no acepta reportes"
+                                                    refresh()
+                                                }
+                                                .onFailure { status = it.message ?: "No se pudo cerrar la actividad" }
+                                            loading = false
+                                        }
+                                    },
+                                    enabled = !loading,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Cerrar coevaluación") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 Text("Alumnos con cuenta online (${onlineStudents.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             if (onlineStudents.isEmpty()) {
@@ -266,4 +448,12 @@ private fun OnlineClassroomScreen(
             }
         }
     }
+}
+
+private fun resolutionLabel(value: String): String = when (value) {
+    "confirmed" -> "Confirmado"
+    "not_confirmed" -> "No confirmado"
+    "partial" -> "Participación parcial"
+    "insufficient_evidence" -> "Sin evidencia suficiente"
+    else -> value
 }

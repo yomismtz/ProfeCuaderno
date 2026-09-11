@@ -2,6 +2,18 @@
 
 Aplicación Android para docentes y núcleo técnico del ecosistema escolar online formado por **ProfeCuaderno**, **El Cuaderno del Estudiante** y **El Escritorio del Director**.
 
+## Descarga Android
+
+La página pública del docente está disponible en:
+
+https://profecuaderno-api-production.up.railway.app/profe
+
+Descarga directa del APK instalable más reciente:
+
+https://github.com/yomismtz/ProfeCuaderno/releases/download/android-latest/ProfeCuaderno.apk
+
+El APK publicado por este flujo es una compilación de prueba para instalación directa. Android puede solicitar autorización para instalar aplicaciones desde el navegador o gestor de archivos.
+
 ## Modo docente
 
 ProfeCuaderno conserva sus herramientas de trabajo docente y añade conexión opcional con el backend central para:
@@ -38,10 +50,7 @@ La aplicación mantiene rubros y rúbricas configurables, asistencia, periodos, 
 
 ## Compilación
 
-El workflow `.github/workflows/build-apk.yml` ejecuta pruebas unitarias y lint y genera artefactos de prueba en ambos formatos:
-
-- `app-debug.apk`
-- `app-debug.aab`
+El workflow `.github/workflows/build-apk.yml` ejecuta pruebas unitarias y lint, genera APK/AAB de prueba y actualiza una descarga pública estable del APK cuando cambia `main`.
 
 Para desarrollo local, abre el repositorio en Android Studio con Java 17 y sincroniza Gradle.
 

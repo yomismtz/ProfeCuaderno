@@ -1,66 +1,50 @@
-# Cuaderno del maestro📓
+# ProfeCuaderno 📓
 
-Aplicación Android para docentes. Funciona como un cuaderno digital configurable para cualquier materia.
+Aplicación Android para docentes y núcleo técnico del ecosistema escolar online formado por **ProfeCuaderno**, **El Cuaderno del Estudiante** y **El Escritorio del Director**.
 
-## Incluido en esta versión 1
+## Modo docente
 
-- Perfil del docente: nombre, fecha de nacimiento, grado profesional, institución y correo.
-- Periodos escolares: trimestre, cuatrimestre, semestre, bimestre u otro.
-- Cierre de periodo sin borrar datos previos.
-- Opción de copiar rubros y rúbricas al siguiente periodo.
-- Base de alumnos: nombre, matrícula/ID, correo, teléfono, nacimiento, grupo, clínica/sección/salón, equipo y observaciones.
-- Pase de lista por fecha.
-- Estados: presente, falta, retardo y justificada.
-- Una clase suspendida/no trabajada no entra al denominador de asistencia.
-- Cálculo automático del porcentaje de asistencia sobre días realmente trabajados.
-- Rubros de evaluación totalmente editables.
-- Validación visual de que los rubros finales sumen 100%.
-- Rúbrica interna independiente para cada rubro.
-- Validación de que cada rúbrica sume 100%.
-- Captura de calificaciones de 0 a 100.
-- Calificación mediante criterios de rúbrica y cálculo automático del rubro.
-- Calificación final ponderada (porcentaje y conversión visual a escala 0–10).
-- Calendario/agenda de fechas importantes.
-- Cumpleaños automáticos a partir de la fecha de nacimiento de los alumnos.
-- Reporte grupal y exportación CSV.
-- Importación de planeaciones con detección de fechas en PDF, Word, texto e imágenes; los PDF escaneados e imágenes usan OCR local.
-- Diseño inspirado en cuaderno, con iconos y paleta morado/menta/turquesa.
-- Rotación Android habilitada: vertical y horizontal.
+ProfeCuaderno conserva sus herramientas de trabajo docente y añade conexión opcional con el backend central para:
 
-## Estructura de evaluación
+- Crear clases online y obtener un código de vinculación.
+- Vincular estudiantes por su cuenta registrada, usando coincidencia exacta de correo cuando se sincronizan registros locales.
+- Publicar avisos de clase.
+- Sincronizar asistencia y calificaciones.
+- Publicar formaciones de equipos ya creadas por el docente.
+- Revisar coevaluaciones anónimas de participación y cerrar/consolidar actividades de equipo.
+- Recibir comunicados privados de Dirección.
 
-Ejemplo:
+Las herramientas locales del cuaderno docente siguen siendo independientes del acceso online. La aplicación **La carpeta del docente offline** es otro producto y no forma parte de este repositorio ni de la política conjunta del ecosistema online.
 
-- Exámenes 40%
-- Actividades 20%
-- Proyecto 25%
-- Exposición 10%
-- Participación 5%
-- TOTAL 100%
+## Ecosistema
 
-Cada rubro puede tener una rúbrica propia que también debe sumar 100%.
+- **ProfeCuaderno**: registra y administra la actividad académica de las clases del docente.
+- **El Cuaderno del Estudiante**: permite al alumno consultar únicamente la información asociada a sus propias clases y enviar reportes de participación dentro de su equipo.
+- **El Escritorio del Director**: administra la institución, vincula docentes, publica comunicados internos y organiza horarios sin abrir acceso general a calificaciones, asistencia o coevaluaciones.
 
-## Abrir en Android Studio
+Sitio público del ecosistema: https://profecuaderno-api-production.up.railway.app/
 
-1. Descomprime la carpeta.
-2. Android Studio > Open > selecciona `ProfeCuaderno`.
-3. Permite que Gradle sincronice las dependencias.
-4. Ejecuta en un dispositivo Android o emulador (mínimo Android 8 / API 26).
+Política de privacidad conjunta: https://profecuaderno-api-production.up.railway.app/privacy
 
-## Generar APK con GitHub Actions
+## Backend central
 
-El repositorio incluye `.github/workflows/build-apk.yml`. Si subes el proyecto a GitHub, el workflow compila automáticamente `app-debug.apk` y lo deja como artefacto de Actions.
+El backend FastAPI está en `backend/` y utiliza autenticación con token, permisos por rol y PostgreSQL en producción. Entre sus controles se incluyen pertenencia a institución/clase, límites de acceso del rol Director, validación de calificaciones y conflictos de horario, además de restricciones de privacidad para coevaluaciones.
 
-## Nota de privacidad
+La documentación interactiva de la API queda disponible en `/docs` y el estado del servicio en `/health`.
 
-La app guarda datos de alumnos localmente en SQLite. Antes de una publicación pública conviene añadir bloqueo por PIN/biometría, cifrado de base de datos y una política de privacidad adecuada para datos personales.
+## Evaluación local
 
-## Siguiente versión sugerida
+La aplicación mantiene rubros y rúbricas configurables, asistencia, periodos, equipos, reportes y exportaciones. Una calificación real de `0` se conserva como valor válido y no debe confundirse con datos ausentes.
 
-- Bloqueo por PIN/biometría.
-- Importar alumnos desde CSV/Excel.
-- Exportar PDF además de CSV.
-- Configurar cuánto vale un retardo o una falta justificada.
-- Plantillas de evaluación reutilizables.
-- Copias de seguridad cifradas.
-- Estadísticas y alertas de alumnos en riesgo.
+## Compilación
+
+El workflow `.github/workflows/build-apk.yml` ejecuta pruebas unitarias y lint y genera artefactos de prueba en ambos formatos:
+
+- `app-debug.apk`
+- `app-debug.aab`
+
+Para desarrollo local, abre el repositorio en Android Studio con Java 17 y sincroniza Gradle.
+
+## Privacidad
+
+Los datos online se rigen por la política conjunta enlazada arriba. Los datos locales que el docente conserve en el dispositivo deben protegerse mediante los controles del dispositivo y las funciones de seguridad de la app. Antes de una publicación institucional definitiva deben confirmarse el responsable legal del tratamiento, un contacto estable de privacidad, los plazos de conservación y los proveedores de infraestructura vigentes.

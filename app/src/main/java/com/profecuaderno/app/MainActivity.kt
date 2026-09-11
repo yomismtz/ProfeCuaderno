@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.profecuaderno.app.security.AppSecurityManager
 import com.profecuaderno.app.data.TeacherDbHelper
+import com.profecuaderno.app.network.CentralBackend
 import com.profecuaderno.app.notifications.ReminderScheduler
 import com.profecuaderno.app.ui.*
 
@@ -34,6 +35,8 @@ class MainActivity : FragmentActivity() {
             CompositionLocalProvider(LocalAppLanguage provides appLanguage) {
                 ProfeCuadernoTheme(style = activeTheme, darkMode = darkMode, fontScale = fontScale, fontStyle = fontStyle) {
                     val db = remember { TeacherDbHelper(context) }
+                    val backend = remember { CentralBackend(context) }
+                    var onlineSession by remember { mutableStateOf(!backend.tokenStore.accessToken.isNullOrBlank()) }
                     LaunchedEffect(Unit) { ReminderScheduler.ensureDaily(context) }
                     var refresh by remember { mutableIntStateOf(0) }
                     val teacher = remember(refresh) { db.getTeacher() }
@@ -51,6 +54,7 @@ class MainActivity : FragmentActivity() {
                     NotebookBackground(style = activeTheme) {
                         when {
                             selectedTheme == null -> ThemeSelectionScreen(initial = AgendaThemeStyle.MINT_LAVENDER, onSelected = { saveTheme(it) })
+                            !onlineSession -> OnlineAuthScreen(backend = backend, onAuthenticated = { onlineSession = true })
                             !unlocked && AppSecurityManager.isLockEnabled(context) -> AppLockScreen(onUnlocked = { unlocked = true })
                             teacher == null -> TeacherSetupScreen(onSave = { db.saveTeacher(it); refresh++ })
                             else -> ProfeCuadernoApp(db = db, onDataChanged = { refresh++ }, globalRefresh = refresh, currentTheme = activeTheme, onThemeChanged = { saveTheme(it) })

@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +22,7 @@ import com.profecuaderno.app.data.AcademicPeriod
 import com.profecuaderno.app.data.TeacherDbHelper
 import com.profecuaderno.app.network.CentralBackend
 import com.profecuaderno.app.network.ClassDto
+import com.profecuaderno.app.network.DirectorNoticeDto
 import com.profecuaderno.app.network.TeacherOnlineSync
 import com.profecuaderno.app.network.TeacherSyncSummary
 import com.profecuaderno.app.network.UserDto
@@ -76,6 +78,7 @@ private fun OnlineClassroomScreen(
     val scope = rememberCoroutineScope()
     var classroom by remember { mutableStateOf<ClassDto?>(null) }
     var onlineStudents by remember { mutableStateOf<List<UserDto>>(emptyList()) }
+    var directorNotices by remember { mutableStateOf<List<DirectorNoticeDto>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Conectando con el servidor…") }
     var noticeTitle by remember { mutableStateOf("") }
@@ -85,13 +88,16 @@ private fun OnlineClassroomScreen(
     fun refresh() {
         scope.launch {
             loading = true
-            runCatching { sync.students(period) }
-                .onSuccess { (serverClass, students) ->
-                    classroom = serverClass
-                    onlineStudents = students
-                    status = "Grupo online conectado"
-                }
-                .onFailure { status = it.message ?: "No se pudo conectar con el grupo online" }
+            runCatching {
+                val (serverClass, students) = sync.students(period)
+                val institutionalNotices = runCatching { backend.api.teacherNotices() }.getOrDefault(emptyList())
+                Triple(serverClass, students, institutionalNotices)
+            }.onSuccess { (serverClass, students, institutionalNotices) ->
+                classroom = serverClass
+                onlineStudents = students
+                directorNotices = institutionalNotices
+                status = "Grupo online conectado"
+            }.onFailure { status = it.message ?: "No se pudo conectar con el grupo online" }
             loading = false
         }
     }
@@ -136,8 +142,35 @@ private fun OnlineClassroomScreen(
 
             item {
                 ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Avisos de Dirección", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        if (directorNotices.isEmpty()) {
+                            Text("No hay avisos institucionales nuevos.")
+                        } else {
+                            directorNotices.take(5).forEach { notice ->
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(notice.title, fontWeight = FontWeight.SemiBold)
+                                    Text(notice.body)
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                        Text(
+                            "Estos avisos son privados para docentes de la institución y no se muestran en la app del estudiante.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+
+            item {
+                ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Publicar aviso", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Publicar aviso al grupo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         OutlinedTextField(
                             value = noticeTitle,
                             onValueChange = { noticeTitle = it },

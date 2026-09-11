@@ -96,6 +96,52 @@ data class GradeRequest(
     val source: String = "teacher_app"
 )
 
+data class TeamDto(
+    val name: String,
+    @SerializedName("student_ids") val studentIds: List<Int>,
+)
+
+data class TeamActivityRequest(
+    val name: String,
+    @SerializedName("activity_type") val activityType: String,
+    val category: String,
+    @SerializedName("activity_key") val activityKey: String,
+    val teams: List<TeamDto>,
+)
+
+data class TeamActivityDto(
+    val id: Int,
+    val name: String,
+    @SerializedName("activity_type") val activityType: String,
+    val category: String,
+    @SerializedName("activity_key") val activityKey: String,
+    val teams: List<TeamDto>? = null,
+    @SerializedName("base_scores") val baseScores: Map<String, Double>? = null,
+    @SerializedName("individual_scores") val individualScores: Map<String, Double>? = null,
+    val closed: Boolean,
+)
+
+data class TeamScoresRequest(
+    @SerializedName("base_scores") val baseScores: Map<String, Double> = emptyMap(),
+    @SerializedName("individual_scores") val individualScores: Map<String, Double> = emptyMap(),
+    @SerializedName("close_and_consolidate") val closeAndConsolidate: Boolean,
+)
+
+data class ParticipationSummaryDto(
+    @SerializedName("student_id") val studentId: Int,
+    @SerializedName("report_count") val reportCount: Int,
+    val partial: Int,
+    @SerializedName("did_not_work") val didNotWork: Int,
+    @SerializedName("requires_corroboration") val requiresCorroboration: Boolean,
+    val resolution: String?,
+    @SerializedName("teacher_note") val teacherNote: String,
+)
+
+data class ParticipationReviewRequest(
+    val resolution: String,
+    val note: String = "",
+)
+
 interface TeacherCentralApi {
     @GET("health")
     suspend fun health(): Map<String, String>
@@ -129,6 +175,25 @@ interface TeacherCentralApi {
 
     @PUT("classes/{classId}/grades")
     suspend fun setGrade(@Path("classId") classId: Int, @Body request: GradeRequest): Map<String, Any?>
+
+    @POST("classes/{classId}/team-activities")
+    suspend fun createTeamActivity(@Path("classId") classId: Int, @Body request: TeamActivityRequest): TeamActivityDto
+
+    @GET("classes/{classId}/team-activities")
+    suspend fun teamActivities(@Path("classId") classId: Int): List<TeamActivityDto>
+
+    @GET("team-activities/{activityId}/participation-summary")
+    suspend fun participationSummary(@Path("activityId") activityId: Int): List<ParticipationSummaryDto>
+
+    @PUT("team-activities/{activityId}/participation-review/{studentId}")
+    suspend fun reviewParticipation(
+        @Path("activityId") activityId: Int,
+        @Path("studentId") studentId: Int,
+        @Body request: ParticipationReviewRequest,
+    ): Map<String, Any?>
+
+    @PUT("team-activities/{activityId}/scores")
+    suspend fun setTeamScores(@Path("activityId") activityId: Int, @Body request: TeamScoresRequest): TeamActivityDto
 }
 
 class CentralBackend(context: Context) {

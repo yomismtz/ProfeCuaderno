@@ -109,3 +109,39 @@ def test_attendance_policy_sessions_and_privacy_summary():
         assert row["attendance_percent"] == 50.0
         assert row["effective_absences"] == 2
         assert "student_id" not in row
+
+        # If a previously worked class is later suspended, its old attendance row
+        # remains auditable but must immediately stop affecting all percentages.
+        suspended = client.put(
+            f"/classes/{class_id}/attendance-session",
+            json={"date": dates[0], "title": titles[0], "worked": False},
+            headers=teacher_headers,
+        )
+        assert suspended.status_code == 200, suspended.text
+
+        after = client.get(
+            f"/classes/{class_id}/attendance-summary/me",
+            headers=student_headers,
+        )
+        assert after.status_code == 200, after.text
+        after_body = after.json()
+        assert after_body["records"] == 3
+        assert after_body["late_penalties"] == 0
+        assert after_body["effective_absences"] == 1
+        assert after_body["attendance_percent"] == 66.67
+
+        teacher_records = client.get(
+            f"/classes/{class_id}/attendance-records/{student['id']}",
+            headers=teacher_headers,
+        )
+        assert teacher_records.status_code == 200, teacher_records.text
+        assert len(teacher_records.json()["records"]) == 4
+        suspended_record = next(row for row in teacher_records.json()["records"] if row["date"] == dates[0])
+        assert suspended_record["worked"] is False
+        assert teacher_records.json()["summary"]["records"] == 3
+
+        institutional_after = client.get("/institutions/attendance-summary", headers=director_headers)
+        assert institutional_after.status_code == 200, institutional_after.text
+        aggregate = next(item for item in institutional_after.json() if item["class_id"] == class_id)
+        assert aggregate["attendance_percent"] == 66.67
+        assert aggregate["effective_absences"] == 1

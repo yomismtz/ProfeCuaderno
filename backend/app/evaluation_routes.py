@@ -120,6 +120,19 @@ def set_evaluation_plan(
         if key not in requested:
             db.delete(row)
 
+    # Las calificaciones-resumen del docente usan la misma category_key como
+    # activity_key. Si un rubro fue eliminado localmente, se elimina también su
+    # valor remoto para que el alumno no siga viendo una calificación obsoleta.
+    category_grades = db.scalars(
+        select(Grade).where(
+            Grade.class_id == class_id,
+            Grade.activity_key.like("category-%"),
+        )
+    ).all()
+    for grade in category_grades:
+        if grade.activity_key not in requested:
+            db.delete(grade)
+
     state = db.get(EvaluationPlanState, class_id)
     if state is None:
         state = EvaluationPlanState(class_id=class_id)
